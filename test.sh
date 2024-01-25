@@ -45,8 +45,11 @@ curl -s -H "Authorization: Bearer $token" -X POST http://localhost:3000/${domain
      -H "Content-Type: application/json" \
      -d '{"key": "test---key1", "value": "hello world"}' | filterDataItem > ./data/100-post-data.json
 
-# Get Data after addition
+# Get all Data after addition
 curl -s -H "Authorization: Bearer $token" -X GET http://localhost:3000/${domain}/data | filterDataItems > ./data/101-get-data.json
+
+# Get key after addition
+curl -s -H "Authorization: Bearer $token" -X GET http://localhost:3000/${domain}/data/test---key1 | filterDataItem > ./data/110-get-data.json
 
 # Update Data
 curl -s -H "Authorization: Bearer $token" -X PUT http://localhost:3000/${domain}/data/test---key1 \

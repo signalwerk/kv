@@ -293,7 +293,6 @@ app.get("/:domain/data", checkDomain, verifyToken, (req, res) => {
 });
 
 app.post("/:domain/data", checkDomain, verifyToken, (req, res) => {
-  console.log("posting data");
   const userId = req.user.id;
   const domain = req.params.domain;
   const { key, value } = req.body;
@@ -321,6 +320,28 @@ app.post("/:domain/data", checkDomain, verifyToken, (req, res) => {
           }
         }
       );
+    }
+  );
+});
+
+app.get("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
+  const userId = req.user.id;
+  const domain = req.params.domain;
+  const key = req.params.key;
+  db.get(
+    "SELECT * FROM store WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE LIMIT 1",
+    [userId, domain, key],
+    (err, row) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (row) {
+        const { userId, domain, ...data } = row;
+        res.json({ data }); // Return the single row as an object
+      } else {
+        res.status(404).json({ error: "No data found" }); // Handle case where no row is found
+      }
     }
   );
 });
