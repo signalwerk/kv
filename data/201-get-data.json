@@ -3,9 +3,7 @@
     {
       "key": "test---key1",
       "value": "new value",
-      "isDeleted": 0,
-      "createdAt": "2024-01-25 17:34:22",
-      "modifiedAt": "2024-01-25 17:34:22"
+      "isDeleted": 0
     }
   ]
 }

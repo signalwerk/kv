@@ -1,12 +1,15 @@
 require("dotenv").config();
 const express = require("express");
-const session = require("express-session");
-const passport = require("passport");
-const LocalStrategy = require("passport-local").Strategy;
 const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3").verbose();
+const jwt = require("jsonwebtoken"); // Added for JWT
 
 const PORT = process.env.PORT || 3000; // Use port from .env or default to 3000
+
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET not set. Exit.");
+  process.exit(1);
+}
 
 // Initialize SQLite database
 
@@ -124,81 +127,54 @@ const db = new sqlite3.Database(dbPath, (err) => {
 // Express application setup
 const app = express();
 app.use(express.json());
-app.use(
-  session({
-    secret: "secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 90 * 24 * 60 * 60 * 1000 }, // 3 months
-  })
-);
 
-app.use(passport.initialize());
-app.use(passport.session());
 app.set("json spaces", 2);
 
 // Custom middleware to allow CORS from everywhere
 app.use((req, res, next) => {
-  // const allowedOrigins = ['http://editor.localhost.signalwerk.ch:3001', 'https://anotherdomain.com']; // Add allowed domains here
   const origin = req.headers.origin;
-  // if (allowedOrigins.includes(origin)) {
-  res.header("Access-Control-Allow-Origin", origin);
-  // }
+
+  res.header("Access-Control-Allow-Origin", origin); // Allow any origin or specify your allowed origins
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization" // Add Authorization here
   );
   res.header("Access-Control-Allow-Credentials", true);
+
   if (req.method === "OPTIONS") {
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
     return res.status(200).json({});
   }
+
   next();
 });
 
-// Passport Local Strategy
-passport.use(
-  new LocalStrategy((username, password, done) => {
-    db.get(
-      "SELECT id, username, password, isActive FROM users WHERE username = ? AND isDeleted = FALSE",
-      [username],
-      (err, row) => {
-        if (err) {
-          return done(err);
-        }
-        if (!row) {
-          return done(null, false, { message: "Incorrect username." });
-        }
-        if (!row.isActive) {
-          return done(null, false, { message: "User not active." });
-        }
-
-        bcrypt.compare(password, row.password, (err, res) => {
-          if (res) {
-            return done(null, row); // passwords match
-          } else {
-            return done(null, false, { message: "Incorrect password." }); // passwords do not match
-          }
-        });
-      }
-    );
-  })
-);
-
-passport.serializeUser((user, done) => {
-  done(null, user.id);
-});
-
-passport.deserializeUser((id, done) => {
-  db.get(
-    "SELECT id, username, isActive, isAdmin FROM users WHERE id = ? AND isDeleted = FALSE",
-    [id],
-    (err, row) => {
-      if (!err) done(null, row);
-      else done(err, null);
+// Helper function to generate JWT
+function generateToken(user) {
+  return jwt.sign(
+    { id: user.id, username: user.username, isAdmin: user.isAdmin },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "90d",
     }
   );
-});
+}
+
+// Helper function to verify JWT
+function verifyToken(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized, no token provided" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: "Unauthorized, invalid token" });
+  }
+}
 
 // Middleware to check domain
 function checkDomain(req, res, next) {
@@ -230,22 +206,52 @@ function isAdmin(req, res, next) {
 }
 
 // Routes
-app.post("/:domain/login", checkDomain, (req, res, next) => {
-  passport.authenticate("local", (err, user, info) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!user) {
-      return res.status(401).json({ error: info.message });
-    }
-    req.logIn(user, (err) => {
+// app.post("/:domain/login", checkDomain, (req, res, next) => {
+//   passport.authenticate("local", (err, user, info) => {
+//     if (err) {
+//       return res.status(500).json({ error: err.message });
+//     }
+//     if (!user) {
+//       return res.status(401).json({ error: info.message });
+//     }
+//     req.logIn(user, (err) => {
+//       if (err) {
+//         return res.status(500).json({ error: err.message });
+//       }
+//       // The user is successfully authenticated, send a response
+//       return res.status(200).json({ message: "Logged in successfully" });
+//     });
+//   })(req, res, next);
+// });
+// Routes
+app.post("/:domain/login", checkDomain, async (req, res) => {
+  // ... existing login code, replace session handling with JWT ...
+  const { username, password } = req.body;
+  const domain = req.params.domain;
+
+  db.get(
+    "SELECT id, username, password, isActive, isAdmin FROM users WHERE username = ? AND isDeleted = FALSE",
+    [username],
+    (err, user) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      // The user is successfully authenticated, send a response
-      return res.status(200).json({ message: "Logged in successfully" });
-    });
-  })(req, res, next);
+      if (!user || !user.isActive) {
+        return res
+          .status(401)
+          .json({ error: "Incorrect username or user not active." });
+      }
+
+      bcrypt.compare(password, user.password, (err, result) => {
+        if (result) {
+          const token = generateToken(user);
+          res.json({ message: "Logged in successfully", token });
+        } else {
+          res.status(401).json({ error: "Incorrect password." });
+        }
+      });
+    }
+  );
 });
 
 app.post("/:domain/register", checkDomain, async (req, res) => {
@@ -266,48 +272,98 @@ app.post("/:domain/register", checkDomain, async (req, res) => {
   );
 });
 
-app.get("/:domain/data", checkDomain, (req, res) => {
-  if (req.isAuthenticated()) {
-    const userId = req.user.id;
-    const domain = req.params.domain;
-    db.all(
-      "SELECT key, value, isDeleted, createdAt, modifiedAt FROM store WHERE userId = ? AND domain = ? AND isDeleted = FALSE",
-      [userId, domain],
-      (err, rows) => {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
-        if (rows) {
-          res.json({ data: rows }); // Return the single row as an object
-        } else {
-          res.status(404).json({ error: "No data found" }); // Handle case where no row is found
-        }
+app.get("/:domain/data", checkDomain, verifyToken, (req, res) => {
+  const userId = req.user.id;
+  const domain = req.params.domain;
+  db.all(
+    "SELECT key, value, isDeleted, createdAt, modifiedAt FROM store WHERE userId = ? AND domain = ? AND isDeleted = FALSE",
+    [userId, domain],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
       }
-    );
-  } else {
-    res.status(401).json({ error: "Unauthorized" });
-  }
+      if (rows) {
+        res.json({ data: rows }); // Return the single row as an object
+      } else {
+        res.status(404).json({ error: "No data found" }); // Handle case where no row is found
+      }
+    }
+  );
 });
 
-app.post("/:domain/data", checkDomain, (req, res) => {
-  if (req.isAuthenticated()) {
-    console.log("posting data");
-    const userId = req.user.id;
-    const domain = req.params.domain;
-    const { key, value } = req.body;
-    db.run(
-      `INSERT INTO store(userId, domain, key, value, isDeleted) 
+app.post("/:domain/data", checkDomain, verifyToken, (req, res) => {
+  console.log("posting data");
+  const userId = req.user.id;
+  const domain = req.params.domain;
+  const { key, value } = req.body;
+  db.run(
+    `INSERT INTO store(userId, domain, key, value, isDeleted) 
         VALUES(?, ?, ?, ?, FALSE)
         ON CONFLICT(userId, domain, key)
         DO UPDATE SET value = excluded.value, isDeleted = FALSE, modifiedAt = CURRENT_TIMESTAMP`,
-      [userId, domain, key, value],
-      function (err) {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
+    [userId, domain, key, value],
+    function (err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      const lastId = this.lastID;
+      db.get(
+        "SELECT * FROM store WHERE userId = ? AND domain = ? AND isDeleted = FALSE",
+        [userId, domain],
+        (err, row) => {
+          if (err) {
+            res.status(500).json({ error: err.message });
+          } else {
+            const { userId, domain, ...data } = row;
+            res.status(201).json({ data });
+          }
         }
-        const lastId = this.lastID;
+      );
+    }
+  );
+});
+
+app.delete("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
+  const userId = req.user.id;
+  const domain = req.params.domain;
+  const key = req.params.key;
+
+  db.run(
+    "UPDATE store SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE",
+    [userId, domain, key],
+    function (err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ message: "Key not found." });
+      } else {
+        res.json({ message: "Key deleted" });
+      }
+    }
+  );
+});
+
+app.put("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
+  const userId = req.user.id;
+  const domain = req.params.domain;
+  const key = req.params.key;
+  const { value } = req.body; // New value for the key
+
+  db.run(
+    "UPDATE store SET value = ?, modifiedAt = CURRENT_TIMESTAMP WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE",
+    [value, userId, domain, key],
+    function (err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ message: "Key not found or no update needed." });
+      } else {
         db.get(
           "SELECT * FROM store WHERE userId = ? AND domain = ? AND isDeleted = FALSE",
           [userId, domain],
@@ -316,84 +372,16 @@ app.post("/:domain/data", checkDomain, (req, res) => {
               res.status(500).json({ error: err.message });
             } else {
               const { userId, domain, ...data } = row;
-              res.status(201).json({ data });
+              res.json({ data });
             }
           }
         );
       }
-    );
-  } else {
-    res.status(401).json({ error: "Unauthorized" });
-  }
+    }
+  );
 });
 
-app.delete("/:domain/data/:key", checkDomain, (req, res) => {
-  if (req.isAuthenticated()) {
-    const userId = req.user.id;
-    const domain = req.params.domain;
-    const key = req.params.key;
-
-    db.run(
-      "UPDATE store SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE",
-      [userId, domain, key],
-      function (err) {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
-        if (this.changes === 0) {
-          res.status(404).json({ message: "Key not found." });
-        } else {
-          res.json({ message: "Key deleted" });
-        }
-      }
-    );
-  } else {
-    res.status(401).json({ error: "Unauthorized" });
-  }
-});
-
-app.put("/:domain/data/:key", checkDomain, (req, res) => {
-  if (req.isAuthenticated()) {
-    const userId = req.user.id;
-    const domain = req.params.domain;
-    const key = req.params.key;
-    const { value } = req.body; // New value for the key
-
-    db.run(
-      "UPDATE store SET value = ?, modifiedAt = CURRENT_TIMESTAMP WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE",
-      [value, userId, domain, key],
-      function (err) {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
-        if (this.changes === 0) {
-          res
-            .status(404)
-            .json({ message: "Key not found or no update needed." });
-        } else {
-          db.get(
-            "SELECT * FROM store WHERE userId = ? AND domain = ? AND isDeleted = FALSE",
-            [userId, domain],
-            (err, row) => {
-              if (err) {
-                res.status(500).json({ error: err.message });
-              } else {
-                const { userId, domain, ...data } = row;
-                res.json({ data });
-              }
-            }
-          );
-        }
-      }
-    );
-  } else {
-    res.status(401).json({ error: "Unauthorized" });
-  }
-});
-
-app.get("/:domain/users", checkDomain, isAdmin, (req, res) => {
+app.get("/:domain/users", checkDomain, verifyToken, isAdmin, (req, res) => {
   const domain = req.params.domain;
 
   db.all(
@@ -409,38 +397,49 @@ app.get("/:domain/users", checkDomain, isAdmin, (req, res) => {
   );
 });
 
-app.put("/:domain/users/:userId", checkDomain, isAdmin, (req, res) => {
-  const { isActive } = req.body;
-  const userId = req.params.userId;
+app.put(
+  "/:domain/users/:userId",
+  checkDomain,
+  verifyToken,
+  isAdmin,
+  (req, res) => {
+    const { isActive } = req.body;
+    const userId = req.params.userId;
 
-  db.run(
-    "UPDATE users SET isActive = ? WHERE id = ? AND isDeleted = FALSE",
-    [isActive, userId],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
+    db.run(
+      "UPDATE users SET isActive = ? WHERE id = ? AND isDeleted = FALSE",
+      [isActive, userId],
+      function (err) {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        res.json({ message: "User updated", changes: this.changes });
       }
-      res.json({ message: "User updated", changes: this.changes });
-    }
-  );
-});
+    );
+  }
+);
 
 // Route to check if the user is logged in
 app.get("/:domain/users/me", checkDomain, (req, res) => {
-  if (req.isAuthenticated()) {
-    // User is logged in
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
+    return res.json({ isLoggedIn: false });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     res.json({
       isLoggedIn: true,
       user: {
-        id: req.user.id,
-        username: req.user.username,
-        isActive: req.user.isActive,
-        isAdmin: req.user.isAdmin,
+        id: decoded.id,
+        username: decoded.username,
+        isActive: decoded.isActive,
+        isAdmin: decoded.isAdmin,
       },
     });
-  } else {
-    // User is not logged in
+  } catch (err) {
     res.json({ isLoggedIn: false });
   }
 });
