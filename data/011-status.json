@@ -1,0 +1,9 @@
+{
+  "isLoggedIn": true,
+  "user": {
+    "id": 1,
+    "username": "signalwerk",
+    "isActive": 1,
+    "isAdmin": 1
+  }
+}

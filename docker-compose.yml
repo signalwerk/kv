@@ -1,0 +1,15 @@
+version: "3"
+services:
+  api:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    container_name: key-value
+    restart: unless-stopped
+    ports:
+      - 5060:5060
+    volumes:
+      - /DATA/key-value/db:/DATA/db
+    environment:
+      TZ: "Europe/Zurich"
+      PORT: 5060

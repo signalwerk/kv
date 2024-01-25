@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "key": "test---key1",
+      "value": "hello world",
+      "isDeleted": 0,
+      "createdAt": "2024-01-25 17:34:22",
+      "modifiedAt": "2024-01-25 17:34:22"
+    }
+  ]
+}
