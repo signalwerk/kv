@@ -242,24 +242,6 @@ function checkDomainAndAccess(req, res, next) {
   );
 }
 
-// Routes
-// app.post("/:domain/login", checkDomain, (req, res, next) => {
-//   passport.authenticate("local", (err, user, info) => {
-//     if (err) {
-//       return res.status(500).json({ error: err.message });
-//     }
-//     if (!user) {
-//       return res.status(401).json({ error: info.message });
-//     }
-//     req.logIn(user, (err) => {
-//       if (err) {
-//         return res.status(500).json({ error: err.message });
-//       }
-//       // The user is successfully authenticated, send a response
-//       return res.status(200).json({ message: "Logged in successfully" });
-//     });
-//   })(req, res, next);
-// });
 // Middleware to check domain exists (for login/register - no auth required)
 function checkDomain(req, res, next) {
   const domain = req.params.domain;
@@ -719,6 +701,89 @@ app.delete("/admin/users/:userId/domains/:domain", verifyToken, (req, res) => {
     }
     res.json(result);
   });
+});
+
+// Admin endpoint to create new user
+app.post("/admin/users", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  const { username, password, domain, isActive = false, isAdmin = false } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password are required" });
+  }
+
+  bcrypt.hash(password, 10, (err, hashedPassword) => {
+    if (err) {
+      return res.status(500).json({ error: "Error hashing password" });
+    }
+
+    db.run(
+      "INSERT INTO users (username, password, domain, isActive, isAdmin) VALUES (?, ?, ?, ?, ?)",
+      [username, hashedPassword, domain || null, isActive, isAdmin],
+      function (err) {
+        if (err) {
+          if (err.message.includes("UNIQUE constraint failed")) {
+            res.status(409).json({ error: "Username already exists" });
+          } else {
+            res.status(500).json({ error: err.message });
+          }
+          return;
+        }
+        res.status(201).json({ 
+          message: "User created successfully", 
+          user: { 
+            id: this.lastID, 
+            username: username,
+            isActive: isActive,
+            isAdmin: isAdmin,
+            domain: domain 
+          } 
+        });
+      }
+    );
+  });
+});
+
+// Admin endpoint to delete user (soft delete)
+app.delete("/admin/users/:userId", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  const { userId } = req.params;
+
+  // Check if user exists and is not already deleted
+  db.get(
+    "SELECT id, username FROM users WHERE id = ? AND isDeleted = FALSE",
+    [userId],
+    (err, row) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      if (!row) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      // Soft delete the user
+      db.run(
+        "UPDATE users SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
+        [userId],
+        function (err) {
+          if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+          }
+          res.json({ message: "User deleted successfully" });
+        }
+      );
+    }
+  );
 });
 
 // Start server if not running tests
