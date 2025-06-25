@@ -49,7 +49,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 console.error("Error creating users table:", err.message);
                 return;
               }
-            }
+            },
           );
 
           db.run(
@@ -69,7 +69,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 console.error("Error creating store table:", err.message);
                 return;
               }
-            }
+            },
           );
 
           db.run(
@@ -90,12 +90,12 @@ const db = new sqlite3.Database(dbPath, (err) => {
                   if (err) {
                     console.error(
                       "Error inserting into domain table:",
-                      err.message
+                      err.message,
                     );
                   }
-                }
+                },
               );
-            }
+            },
           );
 
           // Add default user
@@ -114,13 +114,13 @@ const db = new sqlite3.Database(dbPath, (err) => {
                   if (err) {
                     console.error("Error inserting default user:", err.message);
                   }
-                }
+                },
               );
-            }
+            },
           );
         });
       }
-    }
+    },
   );
 });
 
@@ -137,7 +137,7 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", origin); // Allow any origin or specify your allowed origins
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization" // Add Authorization here
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization", // Add Authorization here
   );
   res.header("Access-Control-Allow-Credentials", true);
 
@@ -156,7 +156,7 @@ function generateToken(user) {
     process.env.JWT_SECRET,
     {
       expiresIn: "90d",
-    }
+    },
   );
 }
 
@@ -176,54 +176,73 @@ function verifyToken(req, res, next) {
   }
 }
 
-// Helper function to check if user is admin
+// Helper function to check if user is admin (SECURE VERSION - checks database)
 function isAdmin(req, res, next) {
-  if (req.user && req.user.isAdmin) {
-    next();
-  } else {
-    res.status(403).json({ error: "Access denied" });
+  if (!req.user || !req.user.id) {
+    return res.status(403).json({ error: "Access denied" });
   }
+
+  // Always check current admin status from database for security
+  db.get(
+    "SELECT isAdmin, isActive FROM users WHERE id = ? AND isDeleted = FALSE",
+    [req.user.id],
+    (err, user) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!user || !user.isActive || !user.isAdmin) {
+        return res
+          .status(403)
+          .json({ error: "Access denied. Admin privileges required." });
+      }
+
+      next();
+    },
+  );
 }
 
 // Helper function to check if user has access to a domain
 function checkUserDomainAccess(req, res, next) {
-  // Admin users have access to all domains
-  if (req.user && req.user.isAdmin) {
-    return next();
-  }
-
   const requestedDomain = req.params.domain;
   const userId = req.user.id;
 
-  // Get user's allowed domains
+  // Get user's current status including admin status and domain access
   db.get(
-    "SELECT domain FROM users WHERE id = ? AND isDeleted = FALSE",
+    "SELECT domain, isAdmin, isActive FROM users WHERE id = ? AND isDeleted = FALSE",
     [userId],
     (err, row) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      
-      if (!row) {
-        return res.status(404).json({ error: "User not found" });
+
+      if (!row || !row.isActive) {
+        return res.status(404).json({ error: "User not found or inactive" });
+      }
+
+      // Admin users have access to all domains (check DB, not JWT)
+      if (row.isAdmin) {
+        return next();
       }
 
       // Parse comma-separated domains
-      const userDomains = row.domain ? row.domain.split(',').map(d => d.trim()) : [];
-      
+      const userDomains = row.domain
+        ? row.domain.split(",").map((d) => d.trim())
+        : [];
+
       if (userDomains.includes(requestedDomain)) {
         next();
       } else {
         res.status(403).json({ error: "Access denied to this domain" });
       }
-    }
+    },
   );
 }
 
 // Middleware to check domain exists and user has access
 function checkDomainAndAccess(req, res, next) {
   const domain = req.params.domain;
-  
+
   // First check if domain exists
   db.get(
     "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
@@ -235,10 +254,10 @@ function checkDomainAndAccess(req, res, next) {
       if (!row) {
         return res.status(404).json({ error: "Domain not found" });
       }
-      
+
       // Domain exists, now check user access
       checkUserDomainAccess(req, res, next);
-    }
+    },
   );
 }
 
@@ -258,7 +277,7 @@ function checkDomain(req, res, next) {
       } else {
         res.status(404).json({ error: "Domain not found" });
       }
-    }
+    },
   );
 }
 
@@ -289,7 +308,7 @@ app.post("/:domain/login", checkDomain, async (req, res) => {
           res.status(401).json({ error: "Incorrect password." });
         }
       });
-    }
+    },
   );
 });
 
@@ -307,7 +326,7 @@ app.post("/:domain/register", checkDomain, async (req, res) => {
         return;
       }
       res.status(201).json({ message: "User created", id: this.lastID });
-    }
+    },
   );
 });
 
@@ -327,7 +346,7 @@ app.get("/:domain/data", verifyToken, checkDomainAndAccess, (req, res) => {
       } else {
         res.status(404).json({ error: "No data found" }); // Handle case where no row is found
       }
-    }
+    },
   );
 });
 
@@ -357,9 +376,9 @@ app.post("/:domain/data", verifyToken, checkDomainAndAccess, (req, res) => {
             const { userId, domain, ...data } = row;
             res.status(201).json({ data });
           }
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -381,31 +400,36 @@ app.get("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
       } else {
         res.status(404).json({ error: "No data found" }); // Handle case where no row is found
       }
-    }
+    },
   );
 });
 
-app.delete("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
-  const userId = req.user.id;
-  const domain = req.params.domain;
-  const key = req.params.key;
+app.delete(
+  "/:domain/data/:key",
+  verifyToken,
+  checkDomainAndAccess,
+  (req, res) => {
+    const userId = req.user.id;
+    const domain = req.params.domain;
+    const key = req.params.key;
 
-  db.run(
-    "UPDATE store SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE",
-    [userId, domain, key],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (this.changes === 0) {
-        res.status(404).json({ message: "Key not found." });
-      } else {
-        res.json({ message: "Key deleted" });
-      }
-    }
-  );
-});
+    db.run(
+      "UPDATE store SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE userId = ? AND domain = ? AND key = ? AND isDeleted = FALSE",
+      [userId, domain, key],
+      function (err) {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        if (this.changes === 0) {
+          res.status(404).json({ message: "Key not found." });
+        } else {
+          res.json({ message: "Key deleted" });
+        }
+      },
+    );
+  },
+);
 
 app.put("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
   const userId = req.user.id;
@@ -434,28 +458,34 @@ app.put("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
               const { userId, domain, ...data } = row;
               res.json({ data });
             }
-          }
+          },
         );
       }
-    }
+    },
   );
 });
 
-app.get("/:domain/users", verifyToken, checkDomainAndAccess, isAdmin, (req, res) => {
-  const domain = req.params.domain;
+app.get(
+  "/:domain/users",
+  verifyToken,
+  checkDomainAndAccess,
+  isAdmin,
+  (req, res) => {
+    const domain = req.params.domain;
 
-  db.all(
-    "SELECT id, username, isActive, isAdmin, domain FROM users WHERE (domain LIKE ? OR domain LIKE ? OR domain LIKE ? OR domain = ?) AND isDeleted = FALSE",
-    [`%,${domain},%`, `${domain},%`, `%,${domain}`, domain],
-    (err, rows) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ users: rows });
-    }
-  );
-});
+    db.all(
+      "SELECT id, username, isActive, isAdmin, domain FROM users WHERE (domain LIKE ? OR domain LIKE ? OR domain LIKE ? OR domain = ?) AND isDeleted = FALSE",
+      [`%,${domain},%`, `${domain},%`, `%,${domain}`, domain],
+      (err, rows) => {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        res.json({ users: rows });
+      },
+    );
+  },
+);
 
 app.put(
   "/:domain/users/:userId",
@@ -475,9 +505,9 @@ app.put(
           return;
         }
         res.json({ message: "User updated", changes: this.changes });
-      }
+      },
     );
-  }
+  },
 );
 
 // Route to check if the user is logged in
@@ -494,11 +524,7 @@ app.get("/:domain/users/me", verifyToken, checkDomainAndAccess, (req, res) => {
 });
 
 // Admin routes for domain management
-app.get("/admin/domains", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
-
+app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {
   db.all(
     "SELECT name, createdAt, modifiedAt FROM domain WHERE isDeleted = FALSE ORDER BY name",
     [],
@@ -508,48 +534,36 @@ app.get("/admin/domains", verifyToken, (req, res) => {
         return;
       }
       res.json({ domains: rows });
-    }
+    },
   );
 });
 
-app.post("/admin/domains", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
-
+app.post("/admin/domains", verifyToken, isAdmin, (req, res) => {
   const { name } = req.body;
-  
-  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
     return res.status(400).json({ error: "Domain name is required" });
   }
 
   const domainName = name.trim().toLowerCase();
 
-  db.run(
-    "INSERT INTO domain (name) VALUES (?)",
-    [domainName],
-    function (err) {
-      if (err) {
-        if (err.message.includes("UNIQUE constraint failed")) {
-          res.status(409).json({ error: "Domain already exists" });
-        } else {
-          res.status(500).json({ error: err.message });
-        }
-        return;
+  db.run("INSERT INTO domain (name) VALUES (?)", [domainName], function (err) {
+    if (err) {
+      if (err.message.includes("UNIQUE constraint failed")) {
+        res.status(409).json({ error: "Domain already exists" });
+      } else {
+        res.status(500).json({ error: err.message });
       }
-      res.status(201).json({ 
-        message: "Domain created successfully", 
-        domain: { name: domainName } 
-      });
+      return;
     }
-  );
+    res.status(201).json({
+      message: "Domain created successfully",
+      domain: { name: domainName },
+    });
+  });
 });
 
-app.delete("/admin/domains/:domain", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
-
+app.delete("/admin/domains/:domain", verifyToken, isAdmin, (req, res) => {
   const domainName = req.params.domain;
 
   // Check if domain exists and is not already deleted
@@ -561,7 +575,7 @@ app.delete("/admin/domains/:domain", verifyToken, (req, res) => {
         res.status(500).json({ error: err.message });
         return;
       }
-      
+
       if (!row) {
         res.status(404).json({ error: "Domain not found" });
         return;
@@ -577,9 +591,9 @@ app.delete("/admin/domains/:domain", verifyToken, (req, res) => {
             return;
           }
           res.json({ message: "Domain deleted successfully" });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -592,19 +606,23 @@ function addDomainToUser(userId, newDomain, callback) {
       if (err) {
         return callback(err);
       }
-      
+
       if (!row) {
         return callback(new Error("User not found"));
       }
 
-      const currentDomains = row.domain ? row.domain.split(',').map(d => d.trim()) : [];
-      
+      const currentDomains = row.domain
+        ? row.domain.split(",").map((d) => d.trim())
+        : [];
+
       if (currentDomains.includes(newDomain)) {
-        return callback(null, { message: "User already has access to this domain" });
+        return callback(null, {
+          message: "User already has access to this domain",
+        });
       }
 
       currentDomains.push(newDomain);
-      const updatedDomains = currentDomains.join(',');
+      const updatedDomains = currentDomains.join(",");
 
       db.run(
         "UPDATE users SET domain = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
@@ -614,9 +632,9 @@ function addDomainToUser(userId, newDomain, callback) {
             return callback(err);
           }
           callback(null, { message: "Domain added to user successfully" });
-        }
+        },
       );
-    }
+    },
   );
 }
 
@@ -628,15 +646,18 @@ function removeDomainFromUser(userId, domainToRemove, callback) {
       if (err) {
         return callback(err);
       }
-      
+
       if (!row) {
         return callback(new Error("User not found"));
       }
 
-      const currentDomains = row.domain ? row.domain.split(',').map(d => d.trim()) : [];
-      const updatedDomains = currentDomains.filter(d => d !== domainToRemove);
-      
-      const newDomainString = updatedDomains.length > 0 ? updatedDomains.join(',') : null;
+      const currentDomains = row.domain
+        ? row.domain.split(",").map((d) => d.trim())
+        : [];
+      const updatedDomains = currentDomains.filter((d) => d !== domainToRemove);
+
+      const newDomainString =
+        updatedDomains.length > 0 ? updatedDomains.join(",") : null;
 
       db.run(
         "UPDATE users SET domain = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
@@ -646,18 +667,14 @@ function removeDomainFromUser(userId, domainToRemove, callback) {
             return callback(err);
           }
           callback(null, { message: "Domain removed from user successfully" });
-        }
+        },
       );
-    }
+    },
   );
 }
 
 // Admin endpoint to manage user domains
-app.post("/admin/users/:userId/domains", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
-
+app.post("/admin/users/:userId/domains", verifyToken, isAdmin, (req, res) => {
   const { userId } = req.params;
   const { domain } = req.body;
 
@@ -673,7 +690,7 @@ app.post("/admin/users/:userId/domains", verifyToken, (req, res) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      
+
       if (!row) {
         return res.status(404).json({ error: "Domain not found" });
       }
@@ -684,35 +701,40 @@ app.post("/admin/users/:userId/domains", verifyToken, (req, res) => {
         }
         res.json(result);
       });
-    }
+    },
   );
 });
 
-app.delete("/admin/users/:userId/domains/:domain", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
+app.delete(
+  "/admin/users/:userId/domains/:domain",
+  verifyToken,
+  isAdmin,
+  (req, res) => {
+    const { userId, domain } = req.params;
 
-  const { userId, domain } = req.params;
-
-  removeDomainFromUser(userId, domain, (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(result);
-  });
-});
+    removeDomainFromUser(userId, domain, (err, result) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(result);
+    });
+  },
+);
 
 // Admin endpoint to create new user
-app.post("/admin/users", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
-
-  const { username, password, domain, isActive = false, isAdmin = false } = req.body;
+app.post("/admin/users", verifyToken, isAdmin, (req, res) => {
+  const {
+    username,
+    password,
+    domain,
+    isActive = false,
+    isAdmin = false,
+  } = req.body;
 
   if (!username || !password) {
-    return res.status(400).json({ error: "Username and password are required" });
+    return res
+      .status(400)
+      .json({ error: "Username and password are required" });
   }
 
   bcrypt.hash(password, 10, (err, hashedPassword) => {
@@ -732,27 +754,23 @@ app.post("/admin/users", verifyToken, (req, res) => {
           }
           return;
         }
-        res.status(201).json({ 
-          message: "User created successfully", 
-          user: { 
-            id: this.lastID, 
+        res.status(201).json({
+          message: "User created successfully",
+          user: {
+            id: this.lastID,
             username: username,
             isActive: isActive,
             isAdmin: isAdmin,
-            domain: domain 
-          } 
+            domain: domain,
+          },
         });
-      }
+      },
     );
   });
 });
 
 // Admin endpoint to delete user (soft delete)
-app.delete("/admin/users/:userId", verifyToken, (req, res) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: "Access denied. Admin required." });
-  }
-
+app.delete("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
   const { userId } = req.params;
 
   // Check if user exists and is not already deleted
@@ -764,7 +782,7 @@ app.delete("/admin/users/:userId", verifyToken, (req, res) => {
         res.status(500).json({ error: err.message });
         return;
       }
-      
+
       if (!row) {
         res.status(404).json({ error: "User not found" });
         return;
@@ -780,9 +798,9 @@ app.delete("/admin/users/:userId", verifyToken, (req, res) => {
             return;
           }
           res.json({ message: "User deleted successfully" });
-        }
+        },
       );
-    }
+    },
   );
 });
 
