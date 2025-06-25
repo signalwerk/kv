@@ -7,7 +7,7 @@ source "$basePath/.env"
 
 username="signalwerk"
 password="$DB_USER_PASSWORD"
-domain="editor"
+domain="testproject"
 
 # File to store the JWT token
 tokenStore="token.txt"

@@ -176,26 +176,6 @@ function verifyToken(req, res, next) {
   }
 }
 
-// Middleware to check domain
-function checkDomain(req, res, next) {
-  const domain = req.params.domain;
-  db.get(
-    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
-    [domain],
-    (err, row) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (row) {
-        next();
-      } else {
-        res.status(404).json({ error: "Domain not found" });
-      }
-    }
-  );
-}
-
 // Helper function to check if user is admin
 function isAdmin(req, res, next) {
   if (req.user && req.user.isAdmin) {
@@ -203,6 +183,63 @@ function isAdmin(req, res, next) {
   } else {
     res.status(403).json({ error: "Access denied" });
   }
+}
+
+// Helper function to check if user has access to a domain
+function checkUserDomainAccess(req, res, next) {
+  // Admin users have access to all domains
+  if (req.user && req.user.isAdmin) {
+    return next();
+  }
+
+  const requestedDomain = req.params.domain;
+  const userId = req.user.id;
+
+  // Get user's allowed domains
+  db.get(
+    "SELECT domain FROM users WHERE id = ? AND isDeleted = FALSE",
+    [userId],
+    (err, row) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Parse comma-separated domains
+      const userDomains = row.domain ? row.domain.split(',').map(d => d.trim()) : [];
+      
+      if (userDomains.includes(requestedDomain)) {
+        next();
+      } else {
+        res.status(403).json({ error: "Access denied to this domain" });
+      }
+    }
+  );
+}
+
+// Middleware to check domain exists and user has access
+function checkDomainAndAccess(req, res, next) {
+  const domain = req.params.domain;
+  
+  // First check if domain exists
+  db.get(
+    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
+    [domain],
+    (err, row) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (!row) {
+        return res.status(404).json({ error: "Domain not found" });
+      }
+      
+      // Domain exists, now check user access
+      checkUserDomainAccess(req, res, next);
+    }
+  );
 }
 
 // Routes
@@ -223,6 +260,26 @@ function isAdmin(req, res, next) {
 //     });
 //   })(req, res, next);
 // });
+// Middleware to check domain exists (for login/register - no auth required)
+function checkDomain(req, res, next) {
+  const domain = req.params.domain;
+  db.get(
+    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
+    [domain],
+    (err, row) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (row) {
+        next();
+      } else {
+        res.status(404).json({ error: "Domain not found" });
+      }
+    }
+  );
+}
+
 // Routes
 app.post("/:domain/login", checkDomain, async (req, res) => {
   // ... existing login code, replace session handling with JWT ...
@@ -272,7 +329,7 @@ app.post("/:domain/register", checkDomain, async (req, res) => {
   );
 });
 
-app.get("/:domain/data", checkDomain, verifyToken, (req, res) => {
+app.get("/:domain/data", verifyToken, checkDomainAndAccess, (req, res) => {
   const userId = req.user.id;
   const domain = req.params.domain;
   db.all(
@@ -292,7 +349,7 @@ app.get("/:domain/data", checkDomain, verifyToken, (req, res) => {
   );
 });
 
-app.post("/:domain/data", checkDomain, verifyToken, (req, res) => {
+app.post("/:domain/data", verifyToken, checkDomainAndAccess, (req, res) => {
   const userId = req.user.id;
   const domain = req.params.domain;
   const { key, value } = req.body;
@@ -324,7 +381,7 @@ app.post("/:domain/data", checkDomain, verifyToken, (req, res) => {
   );
 });
 
-app.get("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
+app.get("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
   const userId = req.user.id;
   const domain = req.params.domain;
   const key = req.params.key;
@@ -346,7 +403,7 @@ app.get("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
   );
 });
 
-app.delete("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
+app.delete("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
   const userId = req.user.id;
   const domain = req.params.domain;
   const key = req.params.key;
@@ -368,7 +425,7 @@ app.delete("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
   );
 });
 
-app.put("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
+app.put("/:domain/data/:key", verifyToken, checkDomainAndAccess, (req, res) => {
   const userId = req.user.id;
   const domain = req.params.domain;
   const key = req.params.key;
@@ -402,12 +459,12 @@ app.put("/:domain/data/:key", checkDomain, verifyToken, (req, res) => {
   );
 });
 
-app.get("/:domain/users", checkDomain, verifyToken, isAdmin, (req, res) => {
+app.get("/:domain/users", verifyToken, checkDomainAndAccess, isAdmin, (req, res) => {
   const domain = req.params.domain;
 
   db.all(
-    "SELECT id, username, isActive, isAdmin FROM users WHERE domain = ? AND isDeleted = FALSE",
-    [domain],
+    "SELECT id, username, isActive, isAdmin, domain FROM users WHERE (domain LIKE ? OR domain LIKE ? OR domain LIKE ? OR domain = ?) AND isDeleted = FALSE",
+    [`%,${domain},%`, `${domain},%`, `%,${domain}`, domain],
     (err, rows) => {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -420,8 +477,8 @@ app.get("/:domain/users", checkDomain, verifyToken, isAdmin, (req, res) => {
 
 app.put(
   "/:domain/users/:userId",
-  checkDomain,
   verifyToken,
+  checkDomainAndAccess,
   isAdmin,
   (req, res) => {
     const { isActive } = req.body;
@@ -442,27 +499,16 @@ app.put(
 );
 
 // Route to check if the user is logged in
-app.get("/:domain/users/me", checkDomain, (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.json({ isLoggedIn: false });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({
-      isLoggedIn: true,
-      user: {
-        id: decoded.id,
-        username: decoded.username,
-        isActive: decoded.isActive,
-        isAdmin: decoded.isAdmin,
-      },
-    });
-  } catch (err) {
-    res.json({ isLoggedIn: false });
-  }
+app.get("/:domain/users/me", verifyToken, checkDomainAndAccess, (req, res) => {
+  // Token is already verified by verifyToken middleware
+  res.json({
+    isLoggedIn: true,
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      isAdmin: req.user.isAdmin,
+    },
+  });
 });
 
 // Admin routes for domain management
@@ -553,6 +599,126 @@ app.delete("/admin/domains/:domain", verifyToken, (req, res) => {
       );
     }
   );
+});
+
+// Helper functions for domain management
+function addDomainToUser(userId, newDomain, callback) {
+  db.get(
+    "SELECT domain FROM users WHERE id = ? AND isDeleted = FALSE",
+    [userId],
+    (err, row) => {
+      if (err) {
+        return callback(err);
+      }
+      
+      if (!row) {
+        return callback(new Error("User not found"));
+      }
+
+      const currentDomains = row.domain ? row.domain.split(',').map(d => d.trim()) : [];
+      
+      if (currentDomains.includes(newDomain)) {
+        return callback(null, { message: "User already has access to this domain" });
+      }
+
+      currentDomains.push(newDomain);
+      const updatedDomains = currentDomains.join(',');
+
+      db.run(
+        "UPDATE users SET domain = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
+        [updatedDomains, userId],
+        function (err) {
+          if (err) {
+            return callback(err);
+          }
+          callback(null, { message: "Domain added to user successfully" });
+        }
+      );
+    }
+  );
+}
+
+function removeDomainFromUser(userId, domainToRemove, callback) {
+  db.get(
+    "SELECT domain FROM users WHERE id = ? AND isDeleted = FALSE",
+    [userId],
+    (err, row) => {
+      if (err) {
+        return callback(err);
+      }
+      
+      if (!row) {
+        return callback(new Error("User not found"));
+      }
+
+      const currentDomains = row.domain ? row.domain.split(',').map(d => d.trim()) : [];
+      const updatedDomains = currentDomains.filter(d => d !== domainToRemove);
+      
+      const newDomainString = updatedDomains.length > 0 ? updatedDomains.join(',') : null;
+
+      db.run(
+        "UPDATE users SET domain = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
+        [newDomainString, userId],
+        function (err) {
+          if (err) {
+            return callback(err);
+          }
+          callback(null, { message: "Domain removed from user successfully" });
+        }
+      );
+    }
+  );
+}
+
+// Admin endpoint to manage user domains
+app.post("/admin/users/:userId/domains", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  const { userId } = req.params;
+  const { domain } = req.body;
+
+  if (!domain) {
+    return res.status(400).json({ error: "Domain is required" });
+  }
+
+  // First check if domain exists
+  db.get(
+    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
+    [domain],
+    (err, row) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: "Domain not found" });
+      }
+
+      addDomainToUser(userId, domain, (err, result) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json(result);
+      });
+    }
+  );
+});
+
+app.delete("/admin/users/:userId/domains/:domain", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  const { userId, domain } = req.params;
+
+  removeDomainFromUser(userId, domain, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(result);
+  });
 });
 
 // Start server if not running tests

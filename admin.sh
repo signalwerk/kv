@@ -76,24 +76,72 @@ create_project() {
     fi
 }
 
+# Function to add domain access to user
+add_user_domain() {
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo "Error: User ID and domain name are required"
+        echo "Usage: $0 add-user-domain <user_id> <domain_name>"
+        exit 1
+    fi
+    
+    token=$(cat $tokenStore)
+    user_id="$1"
+    domain_name="$2"
+    
+    echo ""
+    echo "=== ADDING DOMAIN ACCESS: $domain_name to user $user_id ==="
+    
+    result=$(curl -s -H "Authorization: Bearer $token" \
+                  -X POST $endpoint/admin/users/$user_id/domains \
+                  -H "Content-Type: application/json" \
+                  -d '{"domain": "'$domain_name'"}')
+    
+    echo "$result" | jq '.'
+}
+
+# Function to remove domain access from user
+remove_user_domain() {
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo "Error: User ID and domain name are required"
+        echo "Usage: $0 remove-user-domain <user_id> <domain_name>"
+        exit 1
+    fi
+    
+    token=$(cat $tokenStore)
+    user_id="$1"
+    domain_name="$2"
+    
+    echo ""
+    echo "=== REMOVING DOMAIN ACCESS: $domain_name from user $user_id ==="
+    
+    result=$(curl -s -H "Authorization: Bearer $token" \
+                  -X DELETE $endpoint/admin/users/$user_id/domains/$domain_name)
+    
+    echo "$result" | jq '.'
+}
+
 # Function to show help
 show_help() {
     echo "Usage: $0 [COMMAND] [ARGS]"
     echo ""
     echo "Commands:"
-    echo "  users              List all users"
-    echo "  projects           List all projects/domains"
-    echo "  create-project     Create a new project/domain"
-    echo "  all                List both users and projects"
-    echo "  help               Show this help message"
+    echo "  users                        List all users"
+    echo "  projects                     List all projects/domains"
+    echo "  create-project               Create a new project/domain"
+    echo "  add-user-domain              Add domain access to user"
+    echo "  remove-user-domain           Remove domain access from user"
+    echo "  all                          List both users and projects"
+    echo "  help                         Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                           # List users and projects"
-    echo "  $0 users                     # List only users"
-    echo "  $0 projects                  # List only projects"
-    echo "  $0 create-project myproject  # Create new domain 'myproject'"
+    echo "  $0                                     # List users and projects"
+    echo "  $0 users                               # List only users"
+    echo "  $0 projects                            # List only projects"
+    echo "  $0 create-project myproject            # Create new domain 'myproject'"
+    echo "  $0 add-user-domain 2 myproject         # Give user ID 2 access to 'myproject'"
+    echo "  $0 remove-user-domain 2 myproject      # Remove user ID 2 access to 'myproject'"
     echo ""
-    echo "If no command is provided, 'all' is assumed."
+    echo "If no command is provided, help is shown."
 }
 
 # Clean up token file on exit
@@ -103,7 +151,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Main logic
-case "${1:-all}" in
+case "${1:-help}" in
     "users")
         login
         list_users
@@ -115,6 +163,14 @@ case "${1:-all}" in
     "create-project")
         login
         create_project "$2"
+        ;;
+    "add-user-domain")
+        login
+        add_user_domain "$2" "$3"
+        ;;
+    "remove-user-domain")
+        login
+        remove_user_domain "$2" "$3"
         ;;
     "all")
         login

@@ -7,10 +7,24 @@ A simple REST API service for storing key-value pairs with user authentication a
 ## Features
 
 - JWT-based authentication
-- Domain-based project separation
-- Key-value storage with CRUD operations
+- Domain-based project separation with access control
 - User management (admin features)
+- Multiple domain access per user
+- Key-value storage with CRUD operations
 - SQLite database
+
+## Access Control
+
+### Domain Access
+- **Admin users**: Have access to all domains regardless of their domain field
+- **Regular users**: Only have access to domains listed in their `domain` field (comma-separated)
+- **New users**: When registering, they are automatically granted access to the domain they register through
+
+### User Domain Management
+The `domain` field in the `users` table stores a comma-separated list of domains the user has access to:
+- Single domain: `"editor"`  
+- Multiple domains: `"editor,project1,project2"`
+- No domains: `null` (user cannot access any domains)
 
 ## Database Structure
 
@@ -224,6 +238,23 @@ Content-Type: application/json
 #### Delete Domain
 ```
 DELETE /admin/domains/{domain}
+Authorization: Bearer {token}
+```
+
+#### Add Domain Access to User
+```
+POST /admin/users/{userId}/domains
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "domain": "project_name"
+}
+```
+
+#### Remove Domain Access from User
+```
+DELETE /admin/users/{userId}/domains/{domain}
 Authorization: Bearer {token}
 ```
 
