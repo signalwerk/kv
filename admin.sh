@@ -5,8 +5,8 @@ basePath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Load the .env file
 source "$basePath/.env"
 
-endpoint="http://localhost:3000"
-# endpoint="https://kv.srv.signalwerk.ch"
+# endpoint="http://localhost:3000"
+endpoint="https://kv.srv.signalwerk.ch"
 username="signalwerk"
 password="$DB_USER_PASSWORD"
 domain="editor"
@@ -132,7 +132,7 @@ create_user() {
     username="$1"
     password="$2"
     user_domain="${3:-}"
-    is_active="${4:-false}"
+    is_active="${4:-true}"
     is_admin="${5:-false}"
     
     echo ""
@@ -199,6 +199,68 @@ delete_user() {
     fi
 }
 
+# Function to activate a user
+activate_user() {
+    if [ -z "$1" ]; then
+        echo "Error: User ID is required"
+        echo "Usage: $0 activate-user <user_id>"
+        exit 1
+    fi
+    
+    token=$(cat $tokenStore)
+    user_id="$1"
+    
+    echo ""
+    echo "=== ACTIVATING USER: $user_id ==="
+    
+    result=$(curl -s -H "Authorization: Bearer $token" \
+                  -X PUT $endpoint/${domain}/users/$user_id \
+                  -H "Content-Type: application/json" \
+                  -d '{"isActive": true}')
+    
+    echo "$result" | jq '.'
+    
+    # Check if activation was successful
+    if echo "$result" | jq -e '.message' > /dev/null; then
+        echo ""
+        echo "✓ User ID $user_id activated successfully!"
+    else
+        echo ""
+        echo "✗ Failed to activate user ID $user_id"
+    fi
+}
+
+# Function to deactivate a user
+deactivate_user() {
+    if [ -z "$1" ]; then
+        echo "Error: User ID is required"
+        echo "Usage: $0 deactivate-user <user_id>"
+        exit 1
+    fi
+    
+    token=$(cat $tokenStore)
+    user_id="$1"
+    
+    echo ""
+    echo "=== DEACTIVATING USER: $user_id ==="
+    
+    result=$(curl -s -H "Authorization: Bearer $token" \
+                  -X PUT $endpoint/${domain}/users/$user_id \
+                  -H "Content-Type: application/json" \
+                  -d '{"isActive": false}')
+    
+    echo "$result" | jq '.'
+    
+    # Check if deactivation was successful
+    if echo "$result" | jq -e '.message' > /dev/null; then
+        echo ""
+        echo "✓ User ID $user_id deactivated successfully!"
+    else
+        echo ""
+        echo "✗ Failed to deactivate user ID $user_id"
+    fi
+}
+
 # Function to show help
 show_help() {
     echo "Usage: $0 [COMMAND] [ARGS]"
@@ -209,6 +271,8 @@ show_help() {
     echo "  create-project               Create a new project/domain"
     echo "  create-user                  Create a new user"
     echo "  delete-user                  Delete a user (soft delete)"
+    echo "  activate-user                Activate a user"
+    echo "  deactivate-user              Deactivate a user"
     echo "  add-user-domain              Add domain access to user"
     echo "  remove-user-domain           Remove domain access from user"
     echo "  all                          List both users and projects"
@@ -222,10 +286,13 @@ show_help() {
     echo "  $0 create-user john secret123            # Create user 'john' with password 'secret123'"
     echo "  $0 create-user jane pass456 editor true  # Create active user 'jane' with editor domain access"
     echo "  $0 delete-user 5                         # Delete user with ID 5"
+    echo "  $0 activate-user 5                       # Activate user with ID 5"
+    echo "  $0 deactivate-user 5                     # Deactivate user with ID 5"
     echo "  $0 add-user-domain 2 myproject           # Give user ID 2 access to 'myproject'"
     echo "  $0 remove-user-domain 2 myproject        # Remove user ID 2 access to 'myproject'"
     echo ""
     echo "Note: create-user parameters: <username> <password> [domain] [active:true/false] [admin:true/false]"
+    echo "Note: Users are created as active by default now"
     echo "If no command is provided, help is shown."
 }
 
@@ -256,6 +323,14 @@ case "${1:-help}" in
     "delete-user")
         login
         delete_user "$2"
+        ;;
+    "activate-user")
+        login
+        activate_user "$2"
+        ;;
+    "deactivate-user")
+        login
+        deactivate_user "$2"
         ;;
     "add-user-domain")
         login

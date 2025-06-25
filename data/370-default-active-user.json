@@ -1,0 +1,10 @@
+{
+  "message": "User created successfully",
+  "user": {
+    "id": 29,
+    "username": "testuser_1750894746_default_active",
+    "isActive": true,
+    "isAdmin": false,
+    "domain": "editor"
+  }
+}

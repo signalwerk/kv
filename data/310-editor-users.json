@@ -1,0 +1,25 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "signalwerk",
+      "isActive": 1,
+      "isAdmin": 1,
+      "domain": "editor"
+    },
+    {
+      "id": 2,
+      "username": "newuser",
+      "isActive": 0,
+      "isAdmin": 0,
+      "domain": "editor"
+    },
+    {
+      "id": 27,
+      "username": "testuser_1750894746_auth",
+      "isActive": 1,
+      "isAdmin": 0,
+      "domain": "editor"
+    }
+  ]
+}

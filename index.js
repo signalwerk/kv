@@ -318,7 +318,7 @@ app.post("/:domain/register", checkDomain, async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   db.run(
-    "INSERT INTO users (username, password, domain) VALUES (?, ?, ?)",
+    "INSERT INTO users (username, password, domain, isActive) VALUES (?, ?, ?, TRUE)",
     [username, hashedPassword, domain],
     function (err) {
       if (err) {
@@ -727,7 +727,7 @@ app.post("/admin/users", verifyToken, isAdmin, (req, res) => {
     username,
     password,
     domain,
-    isActive = false,
+    isActive = true,
     isAdmin = false,
   } = req.body;
 

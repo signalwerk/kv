@@ -1,0 +1,14 @@
+{
+  "domains": [
+    {
+      "name": "editor",
+      "createdAt": "2025-06-25 22:14:29",
+      "modifiedAt": "2025-06-25 22:14:29"
+    },
+    {
+      "name": "timetracker",
+      "createdAt": "2025-06-25 22:19:24",
+      "modifiedAt": "2025-06-25 22:19:24"
+    }
+  ]
+}
