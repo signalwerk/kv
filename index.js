@@ -465,6 +465,96 @@ app.get("/:domain/users/me", checkDomain, (req, res) => {
   }
 });
 
+// Admin routes for domain management
+app.get("/admin/domains", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  db.all(
+    "SELECT name, createdAt, modifiedAt FROM domain WHERE isDeleted = FALSE ORDER BY name",
+    [],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ domains: rows });
+    }
+  );
+});
+
+app.post("/admin/domains", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  const { name } = req.body;
+  
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return res.status(400).json({ error: "Domain name is required" });
+  }
+
+  const domainName = name.trim().toLowerCase();
+
+  db.run(
+    "INSERT INTO domain (name) VALUES (?)",
+    [domainName],
+    function (err) {
+      if (err) {
+        if (err.message.includes("UNIQUE constraint failed")) {
+          res.status(409).json({ error: "Domain already exists" });
+        } else {
+          res.status(500).json({ error: err.message });
+        }
+        return;
+      }
+      res.status(201).json({ 
+        message: "Domain created successfully", 
+        domain: { name: domainName } 
+      });
+    }
+  );
+});
+
+app.delete("/admin/domains/:domain", verifyToken, (req, res) => {
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Admin required." });
+  }
+
+  const domainName = req.params.domain;
+
+  // Check if domain exists and is not already deleted
+  db.get(
+    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
+    [domainName],
+    (err, row) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      if (!row) {
+        res.status(404).json({ error: "Domain not found" });
+        return;
+      }
+
+      // Soft delete the domain
+      db.run(
+        "UPDATE domain SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE name = ?",
+        [domainName],
+        function (err) {
+          if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+          }
+          res.json({ message: "Domain deleted successfully" });
+        }
+      );
+    }
+  );
+});
+
 // Start server if not running tests
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
