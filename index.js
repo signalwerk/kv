@@ -198,7 +198,7 @@ function checkDomain(req, res, next) {
 
 // Helper function to check if user is admin
 function isAdmin(req, res, next) {
-  if (req.isAuthenticated() && req.user.isAdmin) {
+  if (req.user && req.user.isAdmin) {
     next();
   } else {
     res.status(403).json({ error: "Access denied" });
@@ -406,7 +406,7 @@ app.get("/:domain/users", checkDomain, verifyToken, isAdmin, (req, res) => {
   const domain = req.params.domain;
 
   db.all(
-    "SELECT id, username, isActive FROM users WHERE domain = ? AND isDeleted = FALSE",
+    "SELECT id, username, isActive, isAdmin FROM users WHERE domain = ? AND isDeleted = FALSE",
     [domain],
     (err, rows) => {
       if (err) {

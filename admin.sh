@@ -5,8 +5,8 @@ basePath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Load the .env file
 source "$basePath/.env"
 
-# endpoint="http://localhost:3000"
-endpoint="https://kv.srv.signalwerk.ch/"
+endpoint="http://localhost:3000"
+# endpoint="https://kv.srv.signalwerk.ch"
 username="signalwerk"
 password="$DB_USER_PASSWORD"
 domain="editor"
