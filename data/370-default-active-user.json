@@ -1,8 +1,8 @@
 {
   "message": "User created successfully",
   "user": {
-    "id": 45,
-    "username": "testuser_1750895205_default_active",
+    "id": 53,
+    "username": "testuser_1750895278_default_active",
     "isActive": true,
     "isAdmin": false,
     "domain": "editor"
