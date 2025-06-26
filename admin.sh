@@ -5,8 +5,8 @@ basePath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Load the .env file
 source "$basePath/.env"
 
-# endpoint="http://localhost:3000"
-endpoint="https://kv.srv.signalwerk.ch"
+endpoint="http://localhost:3000"
+# endpoint="https://kv.srv.signalwerk.ch"
 username="signalwerk"
 password="$DB_USER_PASSWORD"
 domain="editor"
@@ -33,7 +33,7 @@ list_users() {
     token=$(cat $tokenStore)
     echo ""
     echo "=== ALL USERS ==="
-    curl -s -H "Authorization: Bearer $token" -X GET $endpoint/${domain}/users | jq '.'
+    curl -s -H "Authorization: Bearer $token" -X GET $endpoint/admin/users | jq '.'
 }
 
 # Function to list all projects/domains
@@ -214,7 +214,7 @@ activate_user() {
     echo "=== ACTIVATING USER: $user_id ==="
     
     result=$(curl -s -H "Authorization: Bearer $token" \
-                  -X PUT $endpoint/${domain}/users/$user_id \
+                  -X PUT $endpoint/admin/users/$user_id \
                   -H "Content-Type: application/json" \
                   -d '{"isActive": true}')
     
@@ -245,7 +245,7 @@ deactivate_user() {
     echo "=== DEACTIVATING USER: $user_id ==="
     
     result=$(curl -s -H "Authorization: Bearer $token" \
-                  -X PUT $endpoint/${domain}/users/$user_id \
+                  -X PUT $endpoint/admin/users/$user_id \
                   -H "Content-Type: application/json" \
                   -d '{"isActive": false}')
     

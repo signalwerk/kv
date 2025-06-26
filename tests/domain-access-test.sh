@@ -52,7 +52,7 @@ run_domain_access_tests() {
         if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
             log_info "Activating registered user..."
             curl -s -H "Authorization: Bearer $admin_token" \
-                 -X PUT $BASE_URL/editor/users/$user_id \
+                 -X PUT $BASE_URL/admin/users/$user_id \
                  -H "Content-Type: application/json" \
                  -d '{"isActive": true}' > "$basePath/data/401b-user-activate.json"
             log_success "User activated"
@@ -111,7 +111,7 @@ run_domain_access_tests() {
         
         # Test 6: Get user ID for domain grant
         local user_id=$(curl -s -H "Authorization: Bearer $admin_token" \
-                       -X GET $BASE_URL/editor/users | jq -r ".users[] | select(.username==\"$test_user\") | .id")
+                       -X GET $BASE_URL/admin/users | jq -r ".users[] | select(.username==\"$test_user\") | .id")
         
         if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
             log_success "Found user ID: $user_id"

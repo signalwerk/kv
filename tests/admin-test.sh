@@ -60,15 +60,15 @@ run_admin_tests() {
         test_failed=1
     fi
     
-    # Test 4: Get users in editor domain
-    log_info "Getting users in editor domain..."
-    curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/editor/users > "$basePath/data/310-editor-users.json"
+    # Test 4: Get all users (admin route)
+    log_info "Getting all users (admin route)..."
+    curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/admin/users > "$basePath/data/310-editor-users.json"
     
     local users_count=$(cat "$basePath/data/310-editor-users.json" | jq -r '.users | length' 2>/dev/null)
     if [ "$users_count" -gt 0 ]; then
-        log_success "Retrieved $users_count users from editor domain"
+        log_success "Retrieved $users_count users from admin route"
     else
-        log_error "Failed to retrieve users from editor domain"
+        log_error "Failed to retrieve users from admin route"
         test_failed=1
     fi
     
@@ -111,7 +111,7 @@ run_admin_tests() {
         # Test 8: Update user status (deactivate)
         log_info "Deactivating test user..."
         curl -s -H "Authorization: Bearer $admin_token" \
-             -X PUT $BASE_URL/editor/users/$test_user_id \
+             -X PUT $BASE_URL/admin/users/$test_user_id \
              -H "Content-Type: application/json" \
              -d '{"isActive": false}' > "$basePath/data/330-deactivate-user.json"
         
@@ -126,7 +126,7 @@ run_admin_tests() {
         # Test 9: Reactivate user
         log_info "Reactivating test user..."
         curl -s -H "Authorization: Bearer $admin_token" \
-             -X PUT $BASE_URL/editor/users/$test_user_id \
+             -X PUT $BASE_URL/admin/users/$test_user_id \
              -H "Content-Type: application/json" \
              -d '{"isActive": true}' > "$basePath/data/331-reactivate-user.json"
         
@@ -205,7 +205,7 @@ run_admin_tests() {
         # Test 15: Test user deactivation via API (simulate admin tool functionality)
         log_info "Testing user deactivation via API..."
         curl -s -H "Authorization: Bearer $admin_token" \
-             -X PUT $BASE_URL/editor/users/$admin_test_user_id \
+             -X PUT $BASE_URL/admin/users/$admin_test_user_id \
              -H "Content-Type: application/json" \
              -d '{"isActive": false}' > "$basePath/data/365-test-deactivate-user.json"
         
@@ -218,7 +218,7 @@ run_admin_tests() {
         fi
         
         # Verify user is actually deactivated by checking status
-        local user_status=$(curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/editor/users | jq -r ".users[] | select(.id==$admin_test_user_id) | .isActive" 2>/dev/null)
+        local user_status=$(curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/admin/users | jq -r ".users[] | select(.id==$admin_test_user_id) | .isActive" 2>/dev/null)
         if [ "$user_status" = "0" ]; then
             log_success "User correctly deactivated (isActive: $user_status)"
         else
@@ -229,7 +229,7 @@ run_admin_tests() {
         # Test 16: Test user activation via API (simulate admin tool functionality)
         log_info "Testing user activation via API..."
         curl -s -H "Authorization: Bearer $admin_token" \
-             -X PUT $BASE_URL/editor/users/$admin_test_user_id \
+             -X PUT $BASE_URL/admin/users/$admin_test_user_id \
              -H "Content-Type: application/json" \
              -d '{"isActive": true}' > "$basePath/data/366-test-activate-user.json"
         
@@ -242,7 +242,7 @@ run_admin_tests() {
         fi
         
         # Verify user is actually activated by checking status
-        local user_status_after=$(curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/editor/users | jq -r ".users[] | select(.id==$admin_test_user_id) | .isActive" 2>/dev/null)
+        local user_status_after=$(curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/admin/users | jq -r ".users[] | select(.id==$admin_test_user_id) | .isActive" 2>/dev/null)
         if [ "$user_status_after" = "1" ]; then
             log_success "User correctly activated (isActive: $user_status_after)"
         else

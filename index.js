@@ -281,6 +281,244 @@ function checkDomain(req, res, next) {
   );
 }
 
+// Admin routes (must be before domain-specific routes)
+app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {
+  db.all(
+    "SELECT name, createdAt, modifiedAt FROM domain WHERE isDeleted = FALSE ORDER BY name",
+    [],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ domains: rows });
+    },
+  );
+});
+
+// Admin route to list ALL users (not domain-specific)
+app.get("/admin/users", verifyToken, isAdmin, (req, res) => {
+  db.all(
+    "SELECT id, username, isActive, isAdmin, domain, createdAt, modifiedAt FROM users WHERE isDeleted = FALSE ORDER BY username",
+    [],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ users: rows });
+    },
+  );
+});
+
+// Admin endpoint to update user status (activate/deactivate)
+app.put("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
+  const { isActive } = req.body;
+  const userId = req.params.userId;
+
+  db.run(
+    "UPDATE users SET isActive = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ? AND isDeleted = FALSE",
+    [isActive, userId],
+    function (err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ message: "User updated", changes: this.changes });
+    },
+  );
+});
+
+app.post("/admin/domains", verifyToken, isAdmin, (req, res) => {
+  const { name } = req.body;
+
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
+    return res.status(400).json({ error: "Domain name is required" });
+  }
+
+  const domainName = name.trim().toLowerCase();
+
+  db.run("INSERT INTO domain (name) VALUES (?)", [domainName], function (err) {
+    if (err) {
+      if (err.message.includes("UNIQUE constraint failed")) {
+        res.status(409).json({ error: "Domain already exists" });
+      } else {
+        res.status(500).json({ error: err.message });
+      }
+      return;
+    }
+    res.status(201).json({
+      message: "Domain created successfully",
+      domain: { name: domainName },
+    });
+  });
+});
+
+app.delete("/admin/domains/:domain", verifyToken, isAdmin, (req, res) => {
+  const domainName = req.params.domain;
+
+  // Check if domain exists and is not already deleted
+  db.get(
+    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
+    [domainName],
+    (err, row) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      if (!row) {
+        res.status(404).json({ error: "Domain not found" });
+        return;
+      }
+
+      // Soft delete the domain
+      db.run(
+        "UPDATE domain SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE name = ?",
+        [domainName],
+        function (err) {
+          if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+          }
+          res.json({ message: "Domain deleted successfully" });
+        },
+      );
+    },
+  );
+});
+
+// Admin endpoint to manage user domains
+app.post("/admin/users/:userId/domains", verifyToken, isAdmin, (req, res) => {
+  const { userId } = req.params;
+  const { domain } = req.body;
+
+  if (!domain) {
+    return res.status(400).json({ error: "Domain is required" });
+  }
+
+  // First check if domain exists
+  db.get(
+    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
+    [domain],
+    (err, row) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!row) {
+        return res.status(404).json({ error: "Domain not found" });
+      }
+
+      addDomainToUser(userId, domain, (err, result) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json(result);
+      });
+    },
+  );
+});
+
+app.delete(
+  "/admin/users/:userId/domains/:domain",
+  verifyToken,
+  isAdmin,
+  (req, res) => {
+    const { userId, domain } = req.params;
+
+    removeDomainFromUser(userId, domain, (err, result) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(result);
+    });
+  },
+);
+
+// Admin endpoint to create new user
+app.post("/admin/users", verifyToken, isAdmin, (req, res) => {
+  const {
+    username,
+    password,
+    domain,
+    isActive = true,
+    isAdmin = false,
+  } = req.body;
+
+  if (!username || !password) {
+    return res
+      .status(400)
+      .json({ error: "Username and password are required" });
+  }
+
+  bcrypt.hash(password, 10, (err, hashedPassword) => {
+    if (err) {
+      return res.status(500).json({ error: "Error hashing password" });
+    }
+
+    db.run(
+      "INSERT INTO users (username, password, domain, isActive, isAdmin) VALUES (?, ?, ?, ?, ?)",
+      [username, hashedPassword, domain || null, isActive, isAdmin],
+      function (err) {
+        if (err) {
+          if (err.message.includes("UNIQUE constraint failed")) {
+            res.status(409).json({ error: "Username already exists" });
+          } else {
+            res.status(500).json({ error: err.message });
+          }
+          return;
+        }
+        res.status(201).json({
+          message: "User created successfully",
+          user: {
+            id: this.lastID,
+            username: username,
+            isActive: isActive,
+            isAdmin: isAdmin,
+            domain: domain,
+          },
+        });
+      },
+    );
+  });
+});
+
+// Admin endpoint to delete user (soft delete)
+app.delete("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
+  const { userId } = req.params;
+
+  // Check if user exists and is not already deleted
+  db.get(
+    "SELECT id, username FROM users WHERE id = ? AND isDeleted = FALSE",
+    [userId],
+    (err, row) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      if (!row) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      // Soft delete the user
+      db.run(
+        "UPDATE users SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
+        [userId],
+        function (err) {
+          if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+          }
+          res.json({ message: "User deleted successfully" });
+        },
+      );
+    },
+  );
+});
+
 // Routes
 app.post("/:domain/login", checkDomain, async (req, res) => {
   // ... existing login code, replace session handling with JWT ...
@@ -523,80 +761,6 @@ app.get("/:domain/users/me", verifyToken, checkDomainAndAccess, (req, res) => {
   });
 });
 
-// Admin routes for domain management
-app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {
-  db.all(
-    "SELECT name, createdAt, modifiedAt FROM domain WHERE isDeleted = FALSE ORDER BY name",
-    [],
-    (err, rows) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ domains: rows });
-    },
-  );
-});
-
-app.post("/admin/domains", verifyToken, isAdmin, (req, res) => {
-  const { name } = req.body;
-
-  if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return res.status(400).json({ error: "Domain name is required" });
-  }
-
-  const domainName = name.trim().toLowerCase();
-
-  db.run("INSERT INTO domain (name) VALUES (?)", [domainName], function (err) {
-    if (err) {
-      if (err.message.includes("UNIQUE constraint failed")) {
-        res.status(409).json({ error: "Domain already exists" });
-      } else {
-        res.status(500).json({ error: err.message });
-      }
-      return;
-    }
-    res.status(201).json({
-      message: "Domain created successfully",
-      domain: { name: domainName },
-    });
-  });
-});
-
-app.delete("/admin/domains/:domain", verifyToken, isAdmin, (req, res) => {
-  const domainName = req.params.domain;
-
-  // Check if domain exists and is not already deleted
-  db.get(
-    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
-    [domainName],
-    (err, row) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-
-      if (!row) {
-        res.status(404).json({ error: "Domain not found" });
-        return;
-      }
-
-      // Soft delete the domain
-      db.run(
-        "UPDATE domain SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE name = ?",
-        [domainName],
-        function (err) {
-          if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-          }
-          res.json({ message: "Domain deleted successfully" });
-        },
-      );
-    },
-  );
-});
-
 // Helper functions for domain management
 function addDomainToUser(userId, newDomain, callback) {
   db.get(
@@ -672,137 +836,6 @@ function removeDomainFromUser(userId, domainToRemove, callback) {
     },
   );
 }
-
-// Admin endpoint to manage user domains
-app.post("/admin/users/:userId/domains", verifyToken, isAdmin, (req, res) => {
-  const { userId } = req.params;
-  const { domain } = req.body;
-
-  if (!domain) {
-    return res.status(400).json({ error: "Domain is required" });
-  }
-
-  // First check if domain exists
-  db.get(
-    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
-    [domain],
-    (err, row) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-
-      if (!row) {
-        return res.status(404).json({ error: "Domain not found" });
-      }
-
-      addDomainToUser(userId, domain, (err, result) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.json(result);
-      });
-    },
-  );
-});
-
-app.delete(
-  "/admin/users/:userId/domains/:domain",
-  verifyToken,
-  isAdmin,
-  (req, res) => {
-    const { userId, domain } = req.params;
-
-    removeDomainFromUser(userId, domain, (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json(result);
-    });
-  },
-);
-
-// Admin endpoint to create new user
-app.post("/admin/users", verifyToken, isAdmin, (req, res) => {
-  const {
-    username,
-    password,
-    domain,
-    isActive = true,
-    isAdmin = false,
-  } = req.body;
-
-  if (!username || !password) {
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
-  }
-
-  bcrypt.hash(password, 10, (err, hashedPassword) => {
-    if (err) {
-      return res.status(500).json({ error: "Error hashing password" });
-    }
-
-    db.run(
-      "INSERT INTO users (username, password, domain, isActive, isAdmin) VALUES (?, ?, ?, ?, ?)",
-      [username, hashedPassword, domain || null, isActive, isAdmin],
-      function (err) {
-        if (err) {
-          if (err.message.includes("UNIQUE constraint failed")) {
-            res.status(409).json({ error: "Username already exists" });
-          } else {
-            res.status(500).json({ error: err.message });
-          }
-          return;
-        }
-        res.status(201).json({
-          message: "User created successfully",
-          user: {
-            id: this.lastID,
-            username: username,
-            isActive: isActive,
-            isAdmin: isAdmin,
-            domain: domain,
-          },
-        });
-      },
-    );
-  });
-});
-
-// Admin endpoint to delete user (soft delete)
-app.delete("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
-  const { userId } = req.params;
-
-  // Check if user exists and is not already deleted
-  db.get(
-    "SELECT id, username FROM users WHERE id = ? AND isDeleted = FALSE",
-    [userId],
-    (err, row) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-
-      if (!row) {
-        res.status(404).json({ error: "User not found" });
-        return;
-      }
-
-      // Soft delete the user
-      db.run(
-        "UPDATE users SET isDeleted = TRUE, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?",
-        [userId],
-        function (err) {
-          if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-          }
-          res.json({ message: "User deleted successfully" });
-        },
-      );
-    },
-  );
-});
 
 // Start server if not running tests
 if (process.env.NODE_ENV !== "test") {

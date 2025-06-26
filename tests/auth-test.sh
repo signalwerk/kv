@@ -55,7 +55,7 @@ run_auth_tests() {
         if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
             log_info "Activating registered user..."
             curl -s -H "Authorization: Bearer $admin_token" \
-                 -X PUT $BASE_URL/editor/users/$user_id \
+                 -X PUT $BASE_URL/admin/users/$user_id \
                  -H "Content-Type: application/json" \
                  -d '{"isActive": true}' > "$basePath/data/001b-user-activate.json"
             log_success "User activated"
