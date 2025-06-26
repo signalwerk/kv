@@ -313,12 +313,12 @@ app.get("/admin/users", verifyToken, isAdmin, (req, res) => {
 
 // Admin endpoint to update user status (activate/deactivate)
 app.put("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
-  const { isActive } = req.body;
+  const { isActive, isDeleted } = req.body;
   const userId = req.params.userId;
 
   db.run(
-    "UPDATE users SET isActive = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ? AND isDeleted = FALSE",
-    [isActive, userId],
+    "UPDATE users SET isActive = ?, modifiedAt = CURRENT_TIMESTAMP, isDeleted = ? WHERE id = ?",
+    [isActive, isDeleted || false, userId],
     function (err) {
       if (err) {
         res.status(500).json({ error: err.message });
