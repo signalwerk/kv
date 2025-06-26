@@ -520,10 +520,9 @@ app.delete("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
 });
 
 // Routes
-app.post("/:domain/login", checkDomain, async (req, res) => {
+app.post("/login", async (req, res) => {
   // ... existing login code, replace session handling with JWT ...
   const { username, password } = req.body;
-  const domain = req.params.domain;
 
   db.get(
     "SELECT id, username, password, isActive, isAdmin FROM users WHERE username = ? AND isDeleted = FALSE",
@@ -550,14 +549,13 @@ app.post("/:domain/login", checkDomain, async (req, res) => {
   );
 });
 
-app.post("/:domain/register", checkDomain, async (req, res) => {
+app.post("/register", async (req, res) => {
   const { username, password } = req.body;
-  const domain = req.params.domain;
   const hashedPassword = await bcrypt.hash(password, 10);
 
   db.run(
-    "INSERT INTO users (username, password, domain, isActive) VALUES (?, ?, ?, TRUE)",
-    [username, hashedPassword, domain],
+    "INSERT INTO users (username, password, isActive) VALUES (?, ?, FALSE)",
+    [username, hashedPassword],
     function (err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -749,7 +747,7 @@ app.put(
 );
 
 // Route to check if the user is logged in
-app.get("/:domain/users/me", verifyToken, checkDomainAndAccess, (req, res) => {
+app.get("/users/me", verifyToken, (req, res) => {
   // Token is already verified by verifyToken middleware
   res.json({
     isLoggedIn: true,

@@ -26,7 +26,7 @@ run_auth_tests() {
         log_success "Admin login successful"
         
         # Check login status
-        curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/editor/users/me > "$basePath/data/000-admin-status.json"
+        curl -s -H "Authorization: Bearer $admin_token" -X GET $BASE_URL/users/me > "$basePath/data/000-admin-status.json"
         
         local username=$(cat "$basePath/data/000-admin-status.json" | jq -r '.user.username' 2>/dev/null)
         if [ "$username" = "$USERNAME" ]; then
@@ -40,7 +40,7 @@ run_auth_tests() {
     # Test 2: User registration
     log_info "Testing user registration..."
     local test_username="${TEST_USER_PREFIX}_auth"
-    local register_response=$(curl -s -X POST $BASE_URL/editor/register \
+    local register_response=$(curl -s -X POST $BASE_URL/register \
                             -H "Content-Type: application/json" \
                             -d "{\"username\": \"$test_username\", \"password\": \"testpass123\"}")
     
@@ -67,7 +67,7 @@ run_auth_tests() {
     
     # Test 3: User login
     log_info "Testing user login..."
-    local login_response=$(curl -s -X POST $BASE_URL/editor/login \
+    local login_response=$(curl -s -X POST $BASE_URL/login \
                           -H "Content-Type: application/json" \
                           -d "{\"username\": \"$test_username\", \"password\": \"testpass123\"}")
 
@@ -84,7 +84,7 @@ run_auth_tests() {
         log_success "User login successful"
         
         # Check user status
-        curl -s -H "Authorization: Bearer $user_token" -X GET $BASE_URL/editor/users/me > "$basePath/data/003-user-status.json"
+        curl -s -H "Authorization: Bearer $user_token" -X GET $BASE_URL/users/me > "$basePath/data/003-user-status.json"
         
         local user_username=$(cat "$basePath/data/003-user-status.json" | jq -r '.user.username' 2>/dev/null)
         if [ "$user_username" = "$test_username" ]; then
@@ -97,7 +97,7 @@ run_auth_tests() {
     
     # Test 4: Invalid login
     log_info "Testing invalid login..."
-    local invalid_response=$(curl -s -X POST $BASE_URL/editor/login \
+    local invalid_response=$(curl -s -X POST $BASE_URL/login \
                            -H "Content-Type: application/json" \
                            -d '{"username": "nonexistent", "password": "wrongpass"}')
     

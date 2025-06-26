@@ -108,10 +108,9 @@ To add a new domain/project, you have several options:
 ### Option 2: Using curl directly
 ```bash
 # 1. Get admin token
-TOKEN=$(curl -s -X POST http://localhost:3000/editor/login \
-             -H "Content-Type: application/json" \
-             -d '{"username": "signalwerk", "password": "YOUR_PASSWORD"}' \
-             | jq -r '.token')
+TOKEN=$(curl -s -X POST http://localhost:3000/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "your_username", "password": "your_password"}' | jq -r '.token')
 
 # 2. Create domain
 curl -H "Authorization: Bearer $TOKEN" \
@@ -139,7 +138,7 @@ Once created, you can immediately start using the new domain:
 
 #### Login
 ```
-POST /{domain}/login
+POST /login
 Content-Type: application/json
 
 {
@@ -148,9 +147,22 @@ Content-Type: application/json
 }
 ```
 
+#### Register
+```
+POST /register
+Content-Type: application/json
+
+{
+  "username": "your_username",
+  "password": "your_password"
+}
+```
+
+Note: New users are created as inactive and must be activated by an admin.
+
 #### Check Login Status
 ```
-GET /{domain}/users/me
+GET /users/me
 Authorization: Bearer {token}
 ```
 
@@ -258,40 +270,31 @@ DELETE /admin/users/{userId}/domains/{domain}
 Authorization: Bearer {token}
 ```
 
+## Quick Start for Users
+
+1. **Register** (creates inactive user - admin must activate):
+   ```bash
+   curl -X POST https://kv.srv.signalwerk.ch/register \
+     -H "Content-Type: application/json" \
+     -d '{"username": "your_username", "password": "your_password"}'
+   ```
+
+2. **Login** (once activated by admin):
+   ```bash
+   TOKEN=$(curl -s -X POST https://kv.srv.signalwerk.ch/login \
+     -H "Content-Type: application/json" \
+     -d '{"username": "your_username", "password": "your_password"}' | jq -r '.token')
+   ```
+
+3. **Access your project** (admin must grant domain access first):
+   ```bash
+   curl -H "Authorization: Bearer $TOKEN" \
+     https://kv.srv.signalwerk.ch/your-project-name/data
+   ```
+
+- `https://kv.srv.signalwerk.ch/login`
+
 ## Getting Started
 
 1. Install dependencies:
-   ```bash
-   npm install
    ```
-
-2. Create a `.env` file:
-   ```
-   DB_USER_PASSWORD=your_admin_password
-   JWT_SECRET=your_jwt_secret
-   PORT=3000
-   DB_PATH=/path/to/database.db
-   ```
-
-3. Start the server:
-   ```bash
-   npm start
-   ```
-
-4. For development:
-   ```bash
-   npm run dev
-   ```
-
-## Default Setup
-
-- Default admin user: `signalwerk`
-- Default domain: `editor`
-- Admin user has access to all domains and user management features
-
-## Environment Variables
-
-- `DB_USER_PASSWORD`: Password for the default admin user
-- `JWT_SECRET`: Secret key for JWT token signing
-- `PORT`: Server port (default: 3000)
-- `DB_PATH`: Path to SQLite database file 

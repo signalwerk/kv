@@ -58,7 +58,7 @@ filter_data_item() {
 # Function to get admin token
 get_admin_token() {
     local domain=${1:-"editor"}
-    curl -s -X POST $BASE_URL/$domain/login \
+    curl -s -X POST $BASE_URL/login \
          -H "Content-Type: application/json" \
          -d '{"username": "'$USERNAME'", "password": "'$PASSWORD'"}' | jq -r '.token'
 }

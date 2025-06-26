@@ -2,26 +2,25 @@ const request = require("supertest");
 const app = require("./index.js"); // Update with the actual path
 
 describe("API routes", () => {
-  // Test for /:domain/login
-  describe("POST /:domain/login", () => {
+  // Test for /login
+  describe("POST /login", () => {
     it("should login a user", async () => {
       const res = await request(app)
-        .post("/editor/login") // Assuming 'editor' is a valid domain
+        .post("/login")
         .send({ username: "username", password: "password" });
       expect(res.statusCode).toEqual(200);
       // Add more assertions as needed
     });
   });
 
-  // Test for /:domain/register
-  describe("POST /:domain/register", () => {
+  // Test for /register
+  describe("POST /register", () => {
     it("should register a new user", async () => {
       const res = await request(app)
-        .post("/editor/register")
+        .post("/register")
         .send({
           username: "newuser",
           password: "newpassword",
-          domain: "editor",
         });
       expect(res.statusCode).toEqual(201);
       // Add more assertions as needed

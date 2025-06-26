@@ -5,8 +5,8 @@ basePath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Load the .env file
 source "$basePath/.env"
 
-endpoint="http://localhost:3000"
-# endpoint="https://kv.srv.signalwerk.ch"
+# endpoint="http://localhost:3000"
+endpoint="https://kv.srv.signalwerk.ch"
 username="signalwerk"
 password="$DB_USER_PASSWORD"
 domain="editor"
@@ -17,7 +17,7 @@ tokenStore="admin_token.txt"
 # Function to login and get token
 login() {
     echo "Logging in as admin..."
-    curl -s -X POST $endpoint/${domain}/login \
+    curl -s -X POST $endpoint/login \
          -H "Content-Type: application/json" \
          -d '{"username": "'${username}'", "password": "'${password}'"}' | jq -r '.token' > $tokenStore
 

@@ -39,7 +39,7 @@ run_domain_access_tests() {
     
     # Test 2: Register a new test user in editor domain
     log_info "Registering test user..."
-    curl -s -X POST $BASE_URL/editor/register \
+    curl -s -X POST $BASE_URL/register \
          -H "Content-Type: application/json" \
          -d "{\"username\": \"$test_user\", \"password\": \"$test_password\"}" > "$basePath/data/401-register-test-user.json"
     
@@ -64,7 +64,7 @@ run_domain_access_tests() {
     
     # Test 3: Login as test user
     log_info "Logging in as test user..."
-    local login_response=$(curl -s -X POST $BASE_URL/editor/login \
+    local login_response=$(curl -s -X POST $BASE_URL/login \
                           -H "Content-Type: application/json" \
                           -d "{\"username\": \"$test_user\", \"password\": \"$test_password\"}")
     
