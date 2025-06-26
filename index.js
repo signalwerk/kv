@@ -299,7 +299,7 @@ app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {
 // Admin route to list ALL users (not domain-specific)
 app.get("/admin/users", verifyToken, isAdmin, (req, res) => {
   db.all(
-    "SELECT id, username, isActive, isAdmin, domain, createdAt, modifiedAt FROM users WHERE isDeleted = FALSE ORDER BY username",
+    "SELECT id, username, isActive, isAdmin, isDeleted, domain, createdAt, modifiedAt FROM users WHERE isDeleted = FALSE ORDER BY username",
     [],
     (err, rows) => {
       if (err) {
