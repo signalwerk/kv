@@ -11,6 +11,7 @@
   textarea { width: 40em; height: 4em; font: inherit; display: block; }
   label { white-space: nowrap; }
   .del { opacity: .4; }
+  .dirty { background: #fff3c4; }
   h2 { margin: 1em 0 0; }
 </style>
 </head>
@@ -38,32 +39,55 @@ async function api(method, path, body) {
   return json;
 }
 
-// run an action, show errors, re-render
-const act = (fn) => fn().then(render).catch((e) => alert(e.message));
+// run an action, show errors, re-render (which drops unsaved rows, so ask first)
+function act(fn, tr) {
+  const unsaved = [...document.querySelectorAll(".dirty")].filter((e) => e !== tr);
+  if (unsaved.length && !confirm("other rows have unsaved changes that will be lost. continue?")) return;
+  fn().then(render).catch((e) => alert(e.message));
+}
+
+// mark a row as changed until it is saved
+const dirty = (el) => el.closest("tr").classList.add("dirty");
+window.addEventListener("beforeunload", (e) => {
+  if (document.querySelector(".dirty")) e.preventDefault();
+});
+
+// domain chips in the users table: only change the page, save stores them
+const chip = (id, d) =>
+  `<span data-row="user-${id}" data-domain="${esc(d)}">${esc(d)}<button onclick="dirty(this); this.parentNode.remove()">×</button></span> `;
+
+function addChip(select, id) {
+  if (!row("user-" + id).some((e) => e.dataset.domain === select.value)) {
+    dirty(select);
+    select.insertAdjacentHTML("beforebegin", chip(id, select.value));
+  }
+}
 
 // all inputs of a row, marked with data-row="<id>"
 const row = (id) => [...document.querySelectorAll("[data-row]")].filter((e) => e.dataset.row === String(id));
 
 // nothing changes until a row's save button is clicked
-function saveUser(id) {
+function saveUser(button, id) {
   const body = { domain: [] };
-  for (const c of row("user-" + id)) {
-    if (c.name === "domain") c.checked && body.domain.push(c.value);
-    else body[c.name] = c.checked;
+  for (const e of row("user-" + id)) {
+    if (e.dataset.domain) body.domain.push(e.dataset.domain);
+    else if (e.name === "domain") e.checked && body.domain.push(e.value);
+    else body[e.name] = e.checked;
   }
-  act(() => api("PUT", `/admin/users/${id}`, body));
+  act(() => api("PUT", `/admin/users/${id}`, body), button.closest("tr"));
 }
 
-function saveData(key) {
+function saveData(button, key) {
   const [value, del] = row("data-" + key);
   const path = `/${domain}/data/${encodeURIComponent(key)}`;
-  if (del.checked) confirm("delete key?") && act(() => api("DELETE", path));
-  else act(() => api("PUT", path, { value: value.value }));
+  const tr = button.closest("tr");
+  if (del.checked) confirm("delete key?") && act(() => api("DELETE", path), tr);
+  else act(() => api("PUT", path, { value: value.value }), tr);
 }
 
-function saveDomain(name) {
+function saveDomain(button, name) {
   const [del] = row("domain-" + name);
-  if (del.checked && confirm("delete domain?")) act(() => api("DELETE", `/admin/domains/${encodeURIComponent(name)}`));
+  if (del.checked && confirm("delete domain?")) act(() => api("DELETE", `/admin/domains/${encodeURIComponent(name)}`), button.closest("tr"));
 }
 
 function logout() {
@@ -101,7 +125,7 @@ async function render() {
   const check = (u, name, { value = "", checked = u[name], hidden = false } = {}) =>
     `<input type="checkbox" name="${name}" value="${esc(value)}" data-row="user-${u.id}"
       ${checked ? "checked" : ""} ${hidden ? "hidden" : ""} ${u.id === me.id && name !== "domain" ? "disabled title='own user'" : ""}>`;
-  const saveUserButton = (u) => `<button onclick="saveUser(${u.id})">save</button>`;
+  const saveUserButton = (u) => `<button onclick="saveUser(this, ${u.id})">save</button>`;
 
   let html = `<h1><a href="/_/">kv</a>${domain ? " / " + esc(domain) : ""}</h1>
     <p>${esc(me.username)}${me.isAdmin ? " (admin)" : ""} <button onclick="logout()">logout</button></p>`;
@@ -120,11 +144,11 @@ async function render() {
 
     html += `<h2>domains</h2>
       <table><tr><th>name</th><th>created</th><th>delete</th><th></th></tr>
-      ${domains.map((d) => `<tr>
+      ${domains.map((d) => `<tr oninput="dirty(this)">
         <td><a href="/${esc(encodeURIComponent(d.name))}/_/">${esc(d.name)}</a></td>
         <td>${esc(d.createdAt)}</td>
         <td><input type="checkbox" data-row="domain-${esc(d.name)}"></td>
-        <td><button onclick="saveDomain(${str(d.name)})">save</button></td>
+        <td><button onclick="saveDomain(this, ${str(d.name)})">save</button></td>
       </tr>`).join("")}
       </table>
       <form onsubmit="event.preventDefault(); act(() => api('POST', '/admin/domains', { name: this.elements.n.value }))">
@@ -134,14 +158,16 @@ async function render() {
 
       <h2>users</h2>
       <table><tr><th>id</th><th>username</th><th>active</th><th>admin</th><th>deleted</th><th>domains</th><th>modified</th><th></th></tr>
-      ${users.map((u) => `<tr class="${u.isDeleted ? "del" : ""}">
+      ${users.map((u) => `<tr class="${u.isDeleted ? "del" : ""}" oninput="dirty(this)">
         <td>${u.id}</td>
         <td>${esc(u.username)}</td>
         <td>${check(u, "isActive")}</td>
         <td>${check(u, "isAdmin")}</td>
         <td>${check(u, "isDeleted")}</td>
-        <td>${[...new Set([...names, ...split(u.domain)])].map((d) =>
-          `<label>${check(u, "domain", { value: d, checked: split(u.domain).includes(d) })}${esc(d)}</label>`).join(" ")}</td>
+        <td>
+          ${split(u.domain).map((d) => chip(u.id, d)).join("")}
+          <select oninput="event.stopPropagation()">${names.map((d) => `<option>${esc(d)}</option>`).join("")}</select><button onclick="addChip(this.previousElementSibling, ${u.id})">+</button>
+        </td>
         <td>${esc(u.modifiedAt)}</td>
         <td>${saveUserButton(u)}</td>
       </tr>`).join("")}
@@ -167,12 +193,12 @@ async function render() {
     html += `<p>${esc(data)}</p>`;
   } else {
     html += `<table><tr><th>key</th><th>value</th><th>modified</th><th>delete</th><th></th></tr>
-      ${data.map((d) => `<tr>
+      ${data.map((d) => `<tr oninput="dirty(this)">
         <td>${esc(d.key)}</td>
         <td><textarea data-row="data-${esc(d.key)}">${esc(d.value)}</textarea></td>
         <td>${esc(d.modifiedAt)}</td>
         <td><input type="checkbox" data-row="data-${esc(d.key)}"></td>
-        <td><button onclick="saveData(${str(d.key)})">save</button></td>
+        <td><button onclick="saveData(this, ${str(d.key)})">save</button></td>
       </tr>`).join("")}
       </table>
       <form onsubmit="event.preventDefault(); act(() => api('POST', '/' + domain + '/data', { key: this.key.value, value: this.value.value }))">
@@ -191,7 +217,7 @@ async function render() {
 
     html += `<h2>users with access</h2>
       <table><tr><th>id</th><th>username</th><th>active</th><th>admin</th><th>access</th><th></th></tr>
-      ${users.map((u) => `<tr>
+      ${users.map((u) => `<tr oninput="dirty(this)">
         <td>${u.id}</td>
         <td>${esc(u.username)}</td>
         <td>${check(u, "isActive")}</td>

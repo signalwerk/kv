@@ -52,7 +52,7 @@ Never copy `.env` or `*.db` into the image (see `.dockerignore`).
 - CORS reflects any Origin with credentials.
 - **Self-lockout protection:** a user cannot deactivate, delete or remove admin rights from themselves (`isSelf()` in `src/index.js`). Keep this for any new route that changes users. This was added after the production admin accidentally deactivated themselves.
 - `PUT /admin/users/:id` is a partial update: only the fields sent are changed (`isActive`, `isAdmin`, `isDeleted`, `domain` as the full list). `admin.sh` relies on sending single fields.
-- GUI rule: rows in tables change nothing until their **save** button is clicked, and save sends the full record. No immediate-action buttons inside rows. Forms below the tables (create/add/grant) submit directly.
+- GUI rule: rows in tables change nothing until their **save** button is clicked, and save sends the full record. Buttons inside rows (e.g. domain `+`/`×`) only change the page and mark the row `.dirty`. Saving re-renders the page, so `act()` warns if other rows are dirty. Forms below the tables (create/add/grant) submit directly.
 
 ## Routing gotchas
 

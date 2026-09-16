@@ -7,7 +7,7 @@ A minimal viewer/editor for admins.
 - **https://kv.srv.signalwerk.ch/_/**: all domains and users. Create or delete domains; create users; change active/admin/deleted and domain access.
 - **`/{domain}/_/`** (e.g. https://kv.srv.signalwerk.ch/editor/_/): only that domain. Your own keys in it, plus (for admins) the users with access: active, admin, remove access, grant access to another user. Non-admins can use this page for their own data.
 
-Rows in the tables (users, domains, keys) change nothing until you click **save** on that row. The save sends the whole row: active, admin, deleted and domain access for users; value or delete for keys; delete for domains. The forms below the tables (create domain, create user, add key, grant access) act when submitted.
+Rows in the tables (users, domains, keys) change nothing until you click **save** on that row. The save sends the whole row: active, admin, deleted and domain access for users; value or delete for keys; delete for domains. Domain access in the users table is edited with the dropdown and `+`, and removed with `×`; those changes are also only stored on **save**. Changed rows are highlighted. You are warned before unsaved changes would be lost, whether by saving another row or by leaving the page. The forms below the tables (create domain, create user, add key, grant access) act when submitted.
 
 To avoid locking yourself out, you cannot deactivate, delete or remove admin rights from your own user. The API enforces this, and the GUI disables those controls.
 
