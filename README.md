@@ -147,18 +147,7 @@ Content-Type: application/json
 }
 ```
 
-#### Register
-```
-POST /register
-Content-Type: application/json
-
-{
-  "username": "your_username",
-  "password": "your_password"
-}
-```
-
-Note: New users are created as inactive and must be activated by an admin.
+**Note**: User registration is not available through the API. Users must be created by administrators using the admin endpoints.
 
 #### Check Login Status
 ```
@@ -228,6 +217,47 @@ Content-Type: application/json
 }
 ```
 
+### Admin User Management
+
+#### List All Users
+```
+GET /admin/users
+Authorization: Bearer {token}
+```
+
+#### Create User
+```
+POST /admin/users
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "username": "new_username",
+  "password": "password",
+  "domain": "project_name",
+  "isActive": true,
+  "isAdmin": false
+}
+```
+
+#### Update User Status
+```
+PUT /admin/users/{userId}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "isActive": true,
+  "isDeleted": false
+}
+```
+
+#### Delete User (Soft Delete)
+```
+DELETE /admin/users/{userId}
+Authorization: Bearer {token}
+```
+
 ### Domain Management (Admin Only)
 
 #### List Domains
@@ -272,27 +302,37 @@ Authorization: Bearer {token}
 
 ## Quick Start for Users
 
-1. **Register** (creates inactive user - admin must activate):
-   ```bash
-   curl -X POST https://kv.srv.signalwerk.ch/register \
-     -H "Content-Type: application/json" \
-     -d '{"username": "your_username", "password": "your_password"}'
-   ```
+**Note**: User accounts must be created by administrators. Contact your system administrator to create an account.
 
-2. **Login** (once activated by admin):
+1. **Login** (once account is created by admin):
    ```bash
    TOKEN=$(curl -s -X POST https://kv.srv.signalwerk.ch/login \
      -H "Content-Type: application/json" \
      -d '{"username": "your_username", "password": "your_password"}' | jq -r '.token')
    ```
 
-3. **Access your project** (admin must grant domain access first):
+2. **Access your project** (admin must grant domain access):
    ```bash
    curl -H "Authorization: Bearer $TOKEN" \
      https://kv.srv.signalwerk.ch/your-project-name/data
    ```
 
-- `https://kv.srv.signalwerk.ch/login`
+## Admin Quick Start
+
+1. **Create a new user**:
+   ```bash
+   ./admin.sh create-user username password project_name true false
+   ```
+
+2. **Create a new project/domain**:
+   ```bash
+   ./admin.sh create-project project_name
+   ```
+
+3. **Grant domain access to user**:
+   ```bash
+   ./admin.sh add-user-domain user_id project_name
+   ```
 
 ## Getting Started
 

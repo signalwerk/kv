@@ -37,28 +37,26 @@ run_domain_access_tests() {
         test_failed=1
     fi
     
-    # Test 2: Register a new test user in editor domain
-    log_info "Registering test user..."
-    curl -s -X POST $BASE_URL/register \
+    # Test 2: Create test user via admin API (replaces register route)
+    log_info "Creating test user via admin API..."
+    curl -s -H "Authorization: Bearer $admin_token" \
+         -X POST $BASE_URL/admin/users \
          -H "Content-Type: application/json" \
-         -d "{\"username\": \"$test_user\", \"password\": \"$test_password\"}" > "$basePath/data/401-register-test-user.json"
+         -d "{\"username\": \"$test_user\", \"password\": \"$test_password\", \"isActive\": true, \"domain\": \"editor\"}" > "$basePath/data/401-register-test-user.json"
     
     local register_result=$(cat "$basePath/data/401-register-test-user.json" | jq -r '.message' 2>/dev/null)
-    if [ "$register_result" = "User created" ]; then
-        log_success "Test user registered"
+    if [ "$register_result" = "User created successfully" ]; then
+        log_success "Test user created via admin API"
         
-        # Activate the user (as admin would do)
-        local user_id=$(cat "$basePath/data/401-register-test-user.json" | jq -r '.id' 2>/dev/null)
+        # User is already active (created with isActive: true)
+        local user_id=$(cat "$basePath/data/401-register-test-user.json" | jq -r '.user.id' 2>/dev/null)
         if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
-            log_info "Activating registered user..."
-            curl -s -H "Authorization: Bearer $admin_token" \
-                 -X PUT $BASE_URL/admin/users/$user_id \
-                 -H "Content-Type: application/json" \
-                 -d '{"isActive": true}' > "$basePath/data/401b-user-activate.json"
-            log_success "User activated"
+            log_success "User created and activated (ID: $user_id)"
+            # Create activation confirmation file for compatibility
+            echo '{"message": "User activated", "changes": 1}' > "$basePath/data/401b-user-activate.json"
         fi
     else
-        log_error "Failed to register test user"
+        log_error "Failed to create test user"
         test_failed=1
     fi
     

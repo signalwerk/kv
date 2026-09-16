@@ -13,19 +13,7 @@ describe("API routes", () => {
     });
   });
 
-  // Test for /register
-  describe("POST /register", () => {
-    it("should register a new user", async () => {
-      const res = await request(app)
-        .post("/register")
-        .send({
-          username: "newuser",
-          password: "newpassword",
-        });
-      expect(res.statusCode).toEqual(201);
-      // Add more assertions as needed
-    });
-  });
+  // Note: /register route has been removed - users must be created by admins
 
   // Test for /:domain/data
   describe("GET /:domain/data", () => {

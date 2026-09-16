@@ -261,25 +261,7 @@ function checkDomainAndAccess(req, res, next) {
   );
 }
 
-// Middleware to check domain exists (for login/register - no auth required)
-function checkDomain(req, res, next) {
-  const domain = req.params.domain;
-  db.get(
-    "SELECT name FROM domain WHERE name = ? AND isDeleted = FALSE",
-    [domain],
-    (err, row) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (row) {
-        next();
-      } else {
-        res.status(404).json({ error: "Domain not found" });
-      }
-    },
-  );
-}
+
 
 // Admin routes (must be before domain-specific routes)
 app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {
@@ -545,23 +527,6 @@ app.post("/login", async (req, res) => {
           res.status(401).json({ error: "Incorrect password." });
         }
       });
-    },
-  );
-});
-
-app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  db.run(
-    "INSERT INTO users (username, password, isActive) VALUES (?, ?, FALSE)",
-    [username, hashedPassword],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.status(201).json({ message: "User created", id: this.lastID });
     },
   );
 });
