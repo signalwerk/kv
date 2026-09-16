@@ -1,4 +1,5 @@
 require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3").verbose();
@@ -262,6 +263,12 @@ function checkDomainAndAccess(req, res, next) {
 }
 
 
+
+// Minimal admin GUI (uses the API routes below)
+app.get(["/_", "/:domain/_"], (req, res) => {
+  if (!req.path.endsWith("/")) return res.redirect(req.path + "/");
+  res.sendFile(path.join(__dirname, "gui.html"));
+});
 
 // Admin routes (must be before domain-specific routes)
 app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {

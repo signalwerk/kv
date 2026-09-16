@@ -2,10 +2,10 @@
   "name": "kv",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon --ignore data index.js",
+    "start": "node src/index.js",
+    "dev": "nodemon --watch src src/index.js",
     "db:reset": "rm -rf data.db",
     "test": "jest"
   },

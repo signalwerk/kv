@@ -7,14 +7,11 @@ WORKDIR /app
 # Copy package.json and package-lock.json to the container
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install production dependencies only
+RUN npm ci --omit=dev
 
-# Copy the rest of the application code
-COPY . .
-
-# Build
-# RUN npm run build
+# Copy only the application code
+COPY src ./src
 
 # Expose ports
 EXPOSE 5060

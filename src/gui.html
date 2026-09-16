@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kv</title>
+<style>
+  body { font: 13px monospace; margin: 1em; }
+  table { border-collapse: collapse; margin: .5em 0 1.5em; }
+  td, th { border: 1px solid #ccc; padding: 2px 6px; text-align: left; vertical-align: top; }
+  textarea { width: 40em; height: 4em; font: inherit; display: block; }
+  .del { opacity: .4; }
+  h2 { margin: 1em 0 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const first = decodeURIComponent(location.pathname.split("/")[1]);
+const domain = first === "_" ? "" : first; // "" on /_/
+const app = document.getElementById("app");
+let token = localStorage.getItem("kv-token");
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: body && JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (res.status === 401) logout();
+  if (!res.ok) throw new Error(json.error || json.message || res.status);
+  return json;
+}
+
+// run an action, show errors, re-render
+const act = (fn) => fn().then(render).catch((e) => alert(e.message));
+
+function logout() {
+  token = null;
+  localStorage.removeItem("kv-token");
+  render();
+}
+
+async function login(form) {
+  const res = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: form.username.value, password: form.password.value }),
+  });
+  const json = await res.json();
+  if (!res.ok) return alert(json.error);
+  token = json.token;
+  localStorage.setItem("kv-token", token);
+  render();
+}
+
+async function render() {
+  if (!token) {
+    app.innerHTML = `<h1>kv / ${esc(domain)}</h1>
+      <form onsubmit="event.preventDefault(); login(this)">
+        <input name="username" placeholder="username">
+        <input name="password" type="password" placeholder="password">
+        <button>login</button>
+      </form>`;
+    return;
+  }
+
+  const me = (await api("GET", "/users/me")).user;
+  const data = domain
+    ? await api("GET", `/${domain}/data`).then((r) => r.data, (e) => e.message)
+    : "open a domain to see its data";
+  let html = `<h1>kv / ${esc(domain)}</h1>
+    <p>${esc(me.username)}${me.isAdmin ? " (admin)" : ""} <button onclick="logout()">logout</button></p>
+
+    <h2>data (own)</h2>`;
+
+  if (typeof data === "string") {
+    html += `<p>${esc(data)}</p>`;
+  } else {
+    html += `<table><tr><th>key</th><th>value</th><th>modified</th><th></th></tr>
+      ${data.map((d) => `<tr>
+        <td>${esc(d.key)}</td>
+        <td><textarea id="v-${esc(d.key)}">${esc(d.value)}</textarea></td>
+        <td>${esc(d.modifiedAt)}</td>
+        <td>
+          <button onclick="act(() => api('PUT', '/' + domain + '/data/' + encodeURIComponent(${esc(JSON.stringify(d.key))}), { value: document.getElementById('v-' + ${esc(JSON.stringify(d.key))}).value }))">save</button>
+          <button onclick="confirm('delete?') && act(() => api('DELETE', '/' + domain + '/data/' + encodeURIComponent(${esc(JSON.stringify(d.key))})))">delete</button>
+        </td></tr>`).join("")}
+      </table>
+      <form onsubmit="event.preventDefault(); act(() => api('POST', '/' + domain + '/data', { key: this.key.value, value: this.value.value }))">
+        <input name="key" placeholder="key" required>
+        <textarea name="value" placeholder="value"></textarea>
+        <button>add / overwrite</button>
+      </form>`;
+  }
+
+  if (me.isAdmin) {
+    const [{ users }, { domains }] = await Promise.all([
+      api("GET", "/admin/users"),
+      api("GET", "/admin/domains"),
+    ]);
+
+    html += `<h2>users (all)</h2>
+      <table><tr><th>id</th><th>username</th><th>active</th><th>admin</th><th>deleted</th><th>domains</th><th>modified</th><th></th></tr>
+      ${users.map((u) => `<tr class="${u.isDeleted ? "del" : ""}">
+        <td>${u.id}</td>
+        <td>${esc(u.username)}</td>
+        <td><input type="checkbox" ${u.isActive ? "checked" : ""} onchange="act(() => api('PUT', '/admin/users/${u.id}', { isActive: this.checked, isDeleted: ${!!u.isDeleted} }))"></td>
+        <td>${u.isAdmin ? "✓" : ""}</td>
+        <td><input type="checkbox" ${u.isDeleted ? "checked" : ""} onchange="act(() => api('PUT', '/admin/users/${u.id}', { isActive: ${!!u.isActive}, isDeleted: this.checked }))"></td>
+        <td>
+          ${(u.domain ? u.domain.split(",") : []).map((d) => `${esc(d)}<button onclick="act(() => api('DELETE', '/admin/users/${u.id}/domains/' + encodeURIComponent(${esc(JSON.stringify(d))})))">×</button>`).join(" ")}
+          <form style="display:inline" onsubmit="event.preventDefault(); act(() => api('POST', '/admin/users/${u.id}/domains', { domain: this.domain.value }))">
+            <select name="domain">${domains.map((d) => `<option>${esc(d.name)}</option>`).join("")}</select><button>+</button>
+          </form>
+        </td>
+        <td>${esc(u.modifiedAt)}</td>
+        <td>${u.isDeleted ? "" : `<button onclick="confirm('delete user?') && act(() => api('DELETE', '/admin/users/${u.id}'))">delete</button>`}</td>
+      </tr>`).join("")}
+      </table>
+      <form onsubmit="event.preventDefault(); act(() => api('POST', '/admin/users', { username: this.username.value, password: this.password.value, domain: this.domain.value || null, isActive: this.isActive.checked, isAdmin: this.isAdmin.checked }))">
+        <input name="username" placeholder="username" required>
+        <input name="password" placeholder="password" required>
+        <input name="domain" placeholder="domains (a,b)" value="${esc(domain)}">
+        <label><input type="checkbox" name="isActive" checked> active</label>
+        <label><input type="checkbox" name="isAdmin"> admin</label>
+        <button>create user</button>
+      </form>
+
+      <h2>domains</h2>
+      <table><tr><th>name</th><th>created</th><th></th></tr>
+      ${domains.map((d) => `<tr>
+        <td><a href="/${esc(encodeURIComponent(d.name))}/_/">${esc(d.name)}</a></td>
+        <td>${esc(d.createdAt)}</td>
+        <td><button onclick="confirm('delete domain?') && act(() => api('DELETE', '/admin/domains/' + encodeURIComponent(${esc(JSON.stringify(d.name))})))">delete</button></td>
+      </tr>`).join("")}
+      </table>
+      <form onsubmit="event.preventDefault(); act(() => api('POST', '/admin/domains', { name: this.elements.n.value }))">
+        <input name="n" placeholder="domain" required>
+        <button>create domain</button>
+      </form>`;
+  }
+
+  app.innerHTML = html;
+}
+
+render().catch((e) => token && (app.textContent = e.message));
+</script>
+</body>
+</html>

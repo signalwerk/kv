@@ -1,340 +1,49 @@
 # Key-Value Store Service
 
-A simple REST API service for storing key-value pairs with user authentication and domain-based project separation.
+A simple REST API for storing key-value pairs, with user authentication and data separated by project (domain).
 
-**Live Service:** https://kv.srv.signalwerk.ch/
+**Live service:** https://kv.srv.signalwerk.ch/
+**Admin:** https://kv.srv.signalwerk.ch/_/
 
 ## Features
 
-- JWT-based authentication
-- Domain-based project separation with access control
-- User management (admin features)
-- Multiple domain access per user
-- Key-value storage with CRUD operations
+- Key-value storage per user and domain
+- JWT authentication
+- Access control per domain, and users can access several domains
+- User and domain management for admins
+- Minimal admin GUI at `/_/` and `/{domain}/_/`
 - SQLite database
 
-## Access Control
+## Quick start
 
-### Domain Access
-- **Admin users**: Have access to all domains regardless of their domain field
-- **Regular users**: Only have access to domains listed in their `domain` field (comma-separated)
-- **New users**: When registering, they are automatically granted access to the domain they register through
+User accounts are created by an administrator. Once you have one and access to a domain:
 
-### User Domain Management
-The `domain` field in the `users` table stores a comma-separated list of domains the user has access to:
-- Single domain: `"editor"`  
-- Multiple domains: `"editor,project1,project2"`
-- No domains: `null` (user cannot access any domains)
-
-## Database Structure
-
-The service uses SQLite with three main tables:
-
-### `users` Table
-Stores user account information and permissions.
-```sql
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL,              -- bcrypt hashed
-    isActive BOOLEAN NOT NULL DEFAULT(FALSE),
-    isAdmin BOOLEAN NOT NULL DEFAULT(FALSE),
-    domain TEXT,                         -- default domain for user
-    isDeleted BOOLEAN NOT NULL DEFAULT(FALSE),
-    createdAt DATETIME DEFAULT(CURRENT_TIMESTAMP),
-    modifiedAt DATETIME DEFAULT(CURRENT_TIMESTAMP)
-)
-```
-
-### `domain` Table
-Manages available projects/domains for data separation.
-```sql
-CREATE TABLE domain (
-    name TEXT PRIMARY KEY,               -- domain identifier
-    isDeleted BOOLEAN NOT NULL DEFAULT(FALSE),
-    createdAt DATETIME DEFAULT(CURRENT_TIMESTAMP),
-    modifiedAt DATETIME DEFAULT(CURRENT_TIMESTAMP)
-)
-```
-
-### `store` Table
-Contains the actual key-value data, scoped by user and domain.
-```sql
-CREATE TABLE store (
-    userId INTEGER NOT NULL,
-    domain TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value TEXT,                          -- JSON or plain text values
-    isDeleted BOOLEAN NOT NULL DEFAULT(FALSE),
-    createdAt DATETIME DEFAULT(CURRENT_TIMESTAMP),
-    modifiedAt DATETIME DEFAULT(CURRENT_TIMESTAMP),
-    FOREIGN KEY(userId) REFERENCES users(id),
-    UNIQUE(userId, domain, key)
-)
-```
-
-## Admin Scripts
-
-### `admin.sh` - List Users and Projects
 ```bash
-# List all users and projects
-./admin.sh
-
-# List only users
-./admin.sh users
-
-# List only projects/domains
-./admin.sh projects
-
-# Create a new project/domain
-./admin.sh create-project myproject
-
-# Show help
-./admin.sh help
-```
-
-### `test.sh` - API Testing
-Comprehensive test script that demonstrates all API endpoints with sample data.
-
-## Adding New Domains/Projects
-
-To add a new domain/project, you have several options:
-
-### Option 1: Using the admin script (recommended)
-```bash
-./admin.sh create-project your-project-name
-```
-
-### Option 2: Using curl directly
-```bash
-# 1. Get admin token
-TOKEN=$(curl -s -X POST http://localhost:3000/login \
+TOKEN=$(curl -s -X POST https://kv.srv.signalwerk.ch/login \
   -H "Content-Type: application/json" \
   -d '{"username": "your_username", "password": "your_password"}' | jq -r '.token')
 
-# 2. Create domain
-curl -H "Authorization: Bearer $TOKEN" \
-     -X POST http://localhost:3000/admin/domains \
-     -H "Content-Type: application/json" \
-     -d '{"name": "your-project-name"}'
+# store a value
+curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -X POST https://kv.srv.signalwerk.ch/your-project/data \
+  -d '{"key": "hello", "value": "world"}'
+
+# read all values
+curl -H "Authorization: Bearer $TOKEN" https://kv.srv.signalwerk.ch/your-project/data
 ```
 
-### Option 3: For live service
+## Run locally
+
 ```bash
-# Replace localhost:3000 with https://kv.srv.signalwerk.ch
-curl -H "Authorization: Bearer $TOKEN" \
-     -X POST https://kv.srv.signalwerk.ch/admin/domains \
-     -H "Content-Type: application/json" \
-     -d '{"name": "your-project-name"}'
+npm install
+npm run dev
 ```
 
-Once created, you can immediately start using the new domain:
-- `https://kv.srv.signalwerk.ch/your-project-name/data`
-- `https://kv.srv.signalwerk.ch/your-project-name/login`
+Set `JWT_SECRET`, `DB_PATH` and `DB_USER_PASSWORD` in `.env` first (see [Development](docs/development.md)).
 
-## API Endpoints
+## Documentation
 
-### Authentication
-
-#### Login
-```
-POST /login
-Content-Type: application/json
-
-{
-  "username": "your_username",
-  "password": "your_password"
-}
-```
-
-**Note**: User registration is not available through the API. Users must be created by administrators using the admin endpoints.
-
-#### Check Login Status
-```
-GET /users/me
-Authorization: Bearer {token}
-```
-
-### Data Operations
-
-#### Get All Data
-```
-GET /{domain}/data
-Authorization: Bearer {token}
-```
-
-#### Get Single Key
-```
-GET /{domain}/data/{key}
-Authorization: Bearer {token}
-```
-
-#### Create/Update Data
-```
-POST /{domain}/data
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "key": "your_key",
-  "value": "your_value"
-}
-```
-
-#### Update Data
-```
-PUT /{domain}/data/{key}
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "value": "new_value"
-}
-```
-
-#### Delete Key
-```
-DELETE /{domain}/data/{key}
-Authorization: Bearer {token}
-```
-
-### User Management (Admin Only)
-
-#### List Users
-```
-GET /{domain}/users
-Authorization: Bearer {token}
-```
-
-#### Update User Status
-```
-PUT /{domain}/users/{userId}
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "isActive": true
-}
-```
-
-### Admin User Management
-
-#### List All Users
-```
-GET /admin/users
-Authorization: Bearer {token}
-```
-
-#### Create User
-```
-POST /admin/users
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "username": "new_username",
-  "password": "password",
-  "domain": "project_name",
-  "isActive": true,
-  "isAdmin": false
-}
-```
-
-#### Update User Status
-```
-PUT /admin/users/{userId}
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "isActive": true,
-  "isDeleted": false
-}
-```
-
-#### Delete User (Soft Delete)
-```
-DELETE /admin/users/{userId}
-Authorization: Bearer {token}
-```
-
-### Domain Management (Admin Only)
-
-#### List Domains
-```
-GET /admin/domains
-Authorization: Bearer {token}
-```
-
-#### Create Domain
-```
-POST /admin/domains
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "name": "project_name"
-}
-```
-
-#### Delete Domain
-```
-DELETE /admin/domains/{domain}
-Authorization: Bearer {token}
-```
-
-#### Add Domain Access to User
-```
-POST /admin/users/{userId}/domains
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "domain": "project_name"
-}
-```
-
-#### Remove Domain Access from User
-```
-DELETE /admin/users/{userId}/domains/{domain}
-Authorization: Bearer {token}
-```
-
-## Quick Start for Users
-
-**Note**: User accounts must be created by administrators. Contact your system administrator to create an account.
-
-1. **Login** (once account is created by admin):
-   ```bash
-   TOKEN=$(curl -s -X POST https://kv.srv.signalwerk.ch/login \
-     -H "Content-Type: application/json" \
-     -d '{"username": "your_username", "password": "your_password"}' | jq -r '.token')
-   ```
-
-2. **Access your project** (admin must grant domain access):
-   ```bash
-   curl -H "Authorization: Bearer $TOKEN" \
-     https://kv.srv.signalwerk.ch/your-project-name/data
-   ```
-
-## Admin Quick Start
-
-1. **Create a new user**:
-   ```bash
-   ./admin.sh create-user username password project_name true false
-   ```
-
-2. **Create a new project/domain**:
-   ```bash
-   ./admin.sh create-project project_name
-   ```
-
-3. **Grant domain access to user**:
-   ```bash
-   ./admin.sh add-user-domain user_id project_name
-   ```
-
-## Getting Started
-
-1. Install dependencies:
-   ```
+- [API reference](docs/api.md)
+- [Architecture](docs/architecture.md): access control and database
+- [Administration](docs/administration.md): admin GUI, `admin.sh`, onboarding projects
+- [Development](docs/development.md): setup, tests, Docker

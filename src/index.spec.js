@@ -1,5 +1,5 @@
 const request = require("supertest");
-const app = require("./index.js"); // Update with the actual path
+const app = require("./index.js");
 
 describe("API routes", () => {
   // Test for /login
