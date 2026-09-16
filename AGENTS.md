@@ -9,7 +9,7 @@ A small key-value store REST API (Express + SQLite + JWT). Data is split by **do
 ## Structure
 
 - `src/index.js`: the whole server in one file (DB init, middleware, all routes). Exports `app`, and only calls `listen` when `NODE_ENV !== "test"`.
-- `src/gui.html`: minimal admin GUI (vanilla JS, no build), served at `/_/` (admin overview) and `/{domain}/_/` (also shows own data in that domain).
+- `src/gui.html`: minimal admin GUI (vanilla JS, no build), served at `/_/` (admin overview: domains and users only) and `/{domain}/_/` (only that domain: own data and users with access).
 - `src/index.spec.js`: Jest/supertest spec (mostly placeholders).
 - `test.sh` + `tests/*.sh`: the real integration tests (bash + curl + jq) against a running server.
 - `admin.sh`: admin CLI. Hits the **live** endpoint by default (`endpoint=` at the top).
@@ -50,6 +50,9 @@ Never copy `.env` or `*.db` into the image (see `.dockerignore`).
 - There is no registration route. Admins create users (`POST /admin/users`).
 - JWTs last 90 days. `isAdmin`/`isActive` are re-checked against the DB on each protected request, not trusted from the token.
 - CORS reflects any Origin with credentials.
+- **Self-lockout protection:** a user cannot deactivate, delete or remove admin rights from themselves (`isSelf()` in `src/index.js`). Keep this for any new route that changes users. This was added after the production admin accidentally deactivated themselves.
+- `PUT /admin/users/:id` is a partial update: only the fields sent are changed (`isActive`, `isAdmin`, `isDeleted`, `domain` as the full list). `admin.sh` relies on sending single fields.
+- GUI rule: rows in tables change nothing until their **save** button is clicked, and save sends the full record. No immediate-action buttons inside rows. Forms below the tables (create/add/grant) submit directly.
 
 ## Routing gotchas
 

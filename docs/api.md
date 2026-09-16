@@ -85,19 +85,22 @@ Content-Type: application/json
 ```
 `domain` is optional and can be a comma-separated list. `isActive` defaults to `true` and `isAdmin` to `false`.
 
-#### Update a user's status
+#### Update a user
 ```
 PUT /admin/users/{userId}
 Content-Type: application/json
 
-{ "isActive": true, "isDeleted": false }
+{ "isActive": true, "isAdmin": false, "isDeleted": false, "domain": "editor,project1" }
 ```
-Send both fields. A missing `isDeleted` is treated as `false`.
+All fields are optional, but send at least one. Only the fields you send are changed. `isActive`, `isAdmin` and `isDeleted` are booleans. `domain` replaces the user's whole domain list and can be a comma-separated string, an array or `null`.
+
+You cannot deactivate, delete or remove admin rights from your own user (400).
 
 #### Delete a user (soft delete)
 ```
 DELETE /admin/users/{userId}
 ```
+You cannot delete your own user (400).
 
 #### Grant domain access to a user
 ```
@@ -149,6 +152,7 @@ Content-Type: application/json
 
 { "isActive": true }
 ```
+You cannot deactivate your own user (400).
 
 ## GUI
 

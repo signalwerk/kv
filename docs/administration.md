@@ -2,10 +2,14 @@
 
 ## Admin GUI
 
-A minimal viewer/editor is served at https://kv.srv.signalwerk.ch/_/ (users and domains) and at `/{domain}/_/`, for example https://kv.srv.signalwerk.ch/editor/_/ (also shows your data in that domain).
+A minimal viewer/editor for admins.
 
-- Every user can log in and view or edit their own keys in that domain.
-- Admins can also manage all users (active/deleted flags, domain access, creating users) and domains.
+- **https://kv.srv.signalwerk.ch/_/**: all domains and users. Create or delete domains; create users; change active/admin/deleted and domain access.
+- **`/{domain}/_/`** (e.g. https://kv.srv.signalwerk.ch/editor/_/): only that domain. Your own keys in it, plus (for admins) the users with access: active, admin, remove access, grant access to another user. Non-admins can use this page for their own data.
+
+Rows in the tables (users, domains, keys) change nothing until you click **save** on that row. The save sends the whole row: active, admin, deleted and domain access for users; value or delete for keys; delete for domains. The forms below the tables (create domain, create user, add key, grant access) act when submitted.
+
+To avoid locking yourself out, you cannot deactivate, delete or remove admin rights from your own user. The API enforces this, and the GUI disables those controls.
 
 ## `admin.sh`
 

@@ -270,6 +270,11 @@ app.get(["/_", "/:domain/_"], (req, res) => {
   res.sendFile(path.join(__dirname, "gui.html"));
 });
 
+// Prevent admins from locking themselves out
+function isSelf(req) {
+  return String(req.params.userId) === String(req.user.id);
+}
+
 // Admin routes (must be before domain-specific routes)
 app.get("/admin/domains", verifyToken, isAdmin, (req, res) => {
   db.all(
@@ -302,12 +307,42 @@ app.get("/admin/users", verifyToken, isAdmin, (req, res) => {
 
 // Admin endpoint to update user status (activate/deactivate)
 app.put("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
-  const { isActive, isDeleted } = req.body;
   const userId = req.params.userId;
 
+  // Only update the fields that are sent
+  const values = {};
+  for (const f of ["isActive", "isAdmin", "isDeleted"]) {
+    if (typeof req.body[f] === "boolean") values[f] = req.body[f];
+  }
+  // domain: comma-separated string, array or null
+  if (req.body.domain !== undefined) {
+    const list = Array.isArray(req.body.domain)
+      ? req.body.domain
+      : String(req.body.domain ?? "").split(",");
+    const domains = [...new Set(list.map((d) => String(d).trim()).filter(Boolean))];
+    values.domain = domains.length ? domains.join(",") : null;
+  }
+  const fields = Object.keys(values);
+  if (fields.length === 0) {
+    return res.status(400).json({
+      error: "Send at least one of isActive, isAdmin, isDeleted, domain",
+    });
+  }
+
+  if (
+    isSelf(req) &&
+    (req.body.isActive === false ||
+      req.body.isAdmin === false ||
+      req.body.isDeleted === true)
+  ) {
+    return res.status(400).json({
+      error: "You cannot deactivate, delete or remove admin rights from yourself",
+    });
+  }
+
   db.run(
-    "UPDATE users SET isActive = ?, modifiedAt = CURRENT_TIMESTAMP, isDeleted = ? WHERE id = ?",
-    [isActive, isDeleted || false, userId],
+    `UPDATE users SET ${fields.map((f) => `${f} = ?`).join(", ")}, modifiedAt = CURRENT_TIMESTAMP WHERE id = ?`,
+    [...fields.map((f) => values[f]), userId],
     function (err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -476,6 +511,10 @@ app.post("/admin/users", verifyToken, isAdmin, (req, res) => {
 // Admin endpoint to delete user (soft delete)
 app.delete("/admin/users/:userId", verifyToken, isAdmin, (req, res) => {
   const { userId } = req.params;
+
+  if (isSelf(req)) {
+    return res.status(400).json({ error: "You cannot delete yourself" });
+  }
 
   // Check if user exists and is not already deleted
   db.get(
@@ -704,8 +743,15 @@ app.put(
     const { isActive } = req.body;
     const userId = req.params.userId;
 
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({ error: "isActive must be a boolean" });
+    }
+    if (isSelf(req) && !isActive) {
+      return res.status(400).json({ error: "You cannot deactivate yourself" });
+    }
+
     db.run(
-      "UPDATE users SET isActive = ? WHERE id = ? AND isDeleted = FALSE",
+      "UPDATE users SET isActive = ?, modifiedAt = CURRENT_TIMESTAMP WHERE id = ? AND isDeleted = FALSE",
       [isActive, userId],
       function (err) {
         if (err) {
